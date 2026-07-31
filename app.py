@@ -17,16 +17,26 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ydrc-library-super-secret-k
 # 1. Database Connection (Firestore)
 # ==========================================
 def get_db_client():
-    """Initialize Google Cloud Firestore Client using environment variables with PEM fix."""
+    """Initialize Google Cloud Firestore Client with key sanitization."""
     try:
         keys_json = os.environ.get("FIRESTORE_KEYS")
         if keys_json:
             key_dict = json.loads(keys_json)
             
-            # Fix double-escaped newlines in private_key if present (resolves PEM invalid symbol error)
+            # Clean and sanitize PEM private key formatting
             if "private_key" in key_dict and isinstance(key_dict["private_key"], str):
-                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+                pk = key_dict["private_key"].replace("\\n", "\n")
                 
+                header = "-----BEGIN PRIVATE KEY-----\n"
+                footer = "\n-----END PRIVATE KEY-----\n"
+                
+                if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
+                    body = pk.split("-----BEGIN PRIVATE KEY-----")[1].split("-----END PRIVATE KEY-----")[0]
+                    body = body.replace("_", "").strip()
+                    pk = f"{header}{body}{footer}"
+                
+                key_dict["private_key"] = pk
+
             creds = service_account.Credentials.from_service_account_info(key_dict)
             return firestore.Client(
                 credentials=creds,
@@ -129,8 +139,27 @@ def load_data():
 df, idx = load_data()
 
 # ==========================================
-# 4. Authentication Endpoints
+# 4. Base & Authentication Endpoints
 # ==========================================
+
+@app.route('/', methods=['GET'])
+def home():
+    """Root URL endpoint to verify service status and view available routes."""
+    return jsonify({
+        "status": "online",
+        "service": "YDRC Library API",
+        "endpoints": {
+            "get_books": "/api/books",
+            "get_book_details": "/api/books/<id>",
+            "random_book": "/api/books/random",
+            "auth_status": "/api/auth/me",
+            "register": "/api/auth/register",
+            "login": "/api/auth/login",
+            "logout": "/api/auth/logout",
+            "get_comments": "/api/comments?book=<title>",
+            "stats": "/api/stats"
+        }
+    }), 200
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -230,7 +259,6 @@ def get_books():
     if query:
         choices = f_df['_ai_context'].tolist()
         results = process.extract(query, choices, scorer=fuzz.WRatio, limit=100)
-        # Keep items with match score greater than 45
         matched_indices = [f_df.index[res[2]] for res in results if res[1] > 45]
         f_df = f_df.loc[matched_indices]
 
