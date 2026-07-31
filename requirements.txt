@@ -1,0 +1,7 @@
+streamlit
+pandas
+google-cloud-firestore
+google-auth
+requests
+scikit-learn
+sentence-transformers
