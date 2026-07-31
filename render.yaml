@@ -2,8 +2,12 @@ services:
   - type: web
     name: ydrc-library
     env: python
-    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
-    startCommand: "streamlit run app.py --server.port $PORT --server.address 0.0.0.0"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.10.12
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: OWNER_EMAIL
+        sync: false
+      - key: FIRESTORE_KEYS
+        sync: false
