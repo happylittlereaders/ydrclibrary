@@ -17,11 +17,16 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ydrc-library-super-secret-k
 # 1. Database Connection (Firestore)
 # ==========================================
 def get_db_client():
-    """Initialize Google Cloud Firestore Client using environment variables."""
+    """Initialize Google Cloud Firestore Client using environment variables with PEM fix."""
     try:
         keys_json = os.environ.get("FIRESTORE_KEYS")
         if keys_json:
             key_dict = json.loads(keys_json)
+            
+            # Fix double-escaped newlines in private_key if present (resolves PEM invalid symbol error)
+            if "private_key" in key_dict and isinstance(key_dict["private_key"], str):
+                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+                
             creds = service_account.Credentials.from_service_account_info(key_dict)
             return firestore.Client(
                 credentials=creds,
