@@ -4,113 +4,272 @@
     <meta charset="UTF-8">
     <title>Smart Library · Flagship Edition</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #fdf6e3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .sidebar { background-color: #f0f2f6; border-right: 1px solid #e6e9ef; min-height: 100vh; padding: 20px; }
-        .sidebar-title { color: #1e3d59; font-size: 1.3em; font-weight: bold; border-bottom: 2px solid #1e3d59; margin-bottom: 15px; margin-top: 15px; }
+        .sidebar-title { color: #1e3d59; font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #1e3d59; margin-bottom: 15px; margin-top: 20px; }
         
+        /* Tab Navigation Styling */
+        .nav-tabs .nav-link { color: #555; font-weight: 500; border: none; font-size: 1.05em; margin-right: 15px; }
+        .nav-tabs .nav-link.active { color: #ff6e40; background: transparent; border-bottom: 3px solid #ff6e40; font-weight: bold; }
+        
+        .blind-box-btn { background: #ffffff; border: 1px solid #e2d1b0; border-radius: 8px; padding: 12px; font-weight: 500; width: 100%; color: #333; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+
         .book-tile {
-            background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2d1b0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 400px; box-sizing: border-box;
+            background: white; padding: 18px; border-radius: 12px; border: 1px solid #e2d1b0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.03); height: 410px;
             display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 20px;
         }
         .tile-title { 
-            color: #1e3d59; font-size: 1.1em; font-weight: bold; margin-bottom: 4px; 
-            line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-            overflow: hidden; overflow-wrap: break-word; word-wrap: break-word;
+            color: #1e3d59; font-size: 1.1em; font-weight: bold; margin-bottom: 2px; 
+            line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; text-overflow: ellipsis;
         }
         .cover-container { display: flex; justify-content: center; align-items: center; margin-bottom: 10px; height: 140px; }
-        .cover-img { max-height: 140px; max-width: 100%; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); object-fit: contain; }
+        .cover-img { max-height: 140px; max-width: 100%; border-radius: 6px; object-fit: contain; }
         
-        .tag-container { margin-top: auto; display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; }
-        .tag { padding: 3px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; color: white; }
+        .tag-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; margin-bottom: 12px; }
+        .tag { padding: 3px 7px; border-radius: 4px; font-size: 0.72em; font-weight: bold; color: white; }
         .tag-ar { background: #ff6e40; }
         .tag-word { background: #1e3d59; }
         .tag-fnf { background: #2a9d8f; }
         .tag-quiz { background: #6d597a; }
         .tag-il { background: #8888cc; }
-        .user-badge { padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; display: inline-block; color: white; }
+
+        .fav-btn { background: #fff; border: 1px solid #dee2e6; color: #ff4d4f; border-radius: 6px; padding: 4px 12px; }
+        .user-badge { padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; color: white; }
         .badge-owner { background-color: #ffd700; color: #000; }
         .badge-admin { background-color: #ff6e40; }
         .badge-user { background-color: #2a9d8f; }
+        
+        /* Pagination Bar */
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-top: 20px; }
+        .page-input { width: 50px; text-align: center; border-radius: 6px; border: 1px solid #ced4da; padding: 4px; }
     </style>
 </head>
 <body>
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-3 sidebar">
-            <img src="{{ url_for('static', filename='YDRC-logo.png') }}" class="img-fluid mb-3" alt="Logo" onerror="this.style.display='none'">
-            
+            <div class="text-center mb-3">
+                <img src="{{ url_for('static', filename='YDRC-logo.png') }}" class="img-fluid" style="max-height: 70px;" alt="Logo" onerror="this.style.display='none'">
+            </div>
+
             <div class="sidebar-title">👤 User Center</div>
             {% if user %}
-                <span class="user-badge badge-{{ user.role }}">{{ user.role | uppercase }}</span>
-                <div>Hello, <b>{{ user.nickname }}</b></div>
-                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-secondary mt-2">👋 Log Out</a>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div><b>{{ user.nickname }}</b></div>
+                    <span class="user-badge badge-{{ user.role }}">{{ user.role | upper }}</span>
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger w-100 mt-2">👋 Log Out</a>
             {% else %}
-                <form action="{{ url_for('login') }}" method="POST" class="mb-3">
-                    <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email" required>
-                    <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">🚀 Login</button>
-                </form>
+                <ul class="nav nav-pills nav-justified mb-2" id="authTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active btn-sm" id="login-tab" data-bs-toggle="pill" data-bs-target="#login-panel">Log In</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link btn-sm" id="register-tab" data-bs-toggle="pill" data-bs-target="#register-panel">Register</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="login-panel">
+                        <form action="{{ url_for('login') }}" method="POST">
+                            <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email" required>
+                            <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
+                            <button type="submit" class="btn btn-primary btn-sm w-100">🚀 Log In</button>
+                        </form>
+                    </div>
+
+                    <div class="tab-pane fade" id="register-panel">
+                        <form action="{{ url_for('register') }}" method="POST">
+                            <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email (Account ID)" required>
+                            <input type="text" name="nickname" class="form-control form-control-sm mb-2" placeholder="Nickname (Display Name)" required>
+                            <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
+                            <button type="submit" class="btn btn-success btn-sm w-100">✨ Create Account</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#resetPasswordCollapse">
+                        🔑 Forgot/Reset Password
+                    </button>
+                    <div class="collapse mt-2" id="resetPasswordCollapse">
+                        <div class="card card-body p-2 style="font-size: 0.85em;">
+                            <small class="text-muted mb-2">Verify Project ID to reset account</small>
+                            <form action="{{ url_for('reset_password') }}" method="POST">
+                                <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Account Email" required>
+                                <input type="text" name="project_id" class="form-control form-control-sm mb-2" placeholder="Project ID Verification" required>
+                                <input type="password" name="new_password" class="form-control form-control-sm mb-2" placeholder="New Password" required>
+                                <button type="submit" class="btn btn-warning btn-sm w-100">Confirm Reset</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             {% endif %}
 
-            <div class="sidebar-title">🔍 Search Center</div>
+            <hr class="my-3">
+
+            <div class="sidebar-title">💡 Smart AI Search</div>
             <form method="GET" action="/">
-                <input type="text" name="fuzzy" class="form-control form-control-sm mb-2" placeholder="💡 Fuzzy Search..." value="{{ filters.get('fuzzy', '') }}">
+                <input type="text" name="fuzzy" class="form-control form-control-sm mb-3" placeholder="Enter concepts or keywords..." value="{{ filters.get('fuzzy', '') }}">
+
+                <div class="sidebar-title">🔍 Filters</div>
                 <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="📖 Title" value="{{ filters.get('title', '') }}">
                 <input type="text" name="author" class="form-control form-control-sm mb-2" placeholder="👤 Author" value="{{ filters.get('author', '') }}">
+                
+                <label class="form-label mb-1"><small>📚 Genre</small></label>
                 <select name="fnf" class="form-select form-select-sm mb-2">
-                    <option value="All">All Genres</option>
-                    <option value="Fiction">Fiction</option>
-                    <option value="Nonfiction">Nonfiction</option>
+                    <option value="All" {% if filters.get('fnf')=='All' %}selected{% endif %}>All</option>
+                    <option value="Fiction" {% if filters.get('fnf')=='Fiction' %}selected{% endif %}>Fiction</option>
+                    <option value="Nonfiction" {% if filters.get('fnf')=='Nonfiction' %}selected{% endif %}>Nonfiction</option>
                 </select>
-                <button type="submit" class="btn btn-dark btn-sm w-100 mt-2">Filter Books</button>
+
+                <label class="form-label mb-1"><small>🎯 Interest Level</small></label>
+                <select name="il" class="form-select form-select-sm mb-2">
+                    <option value="All">All</option>
+                    {% for opt in il_options %}
+                        <option value="{{ opt }}" {% if filters.get('il')==opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+
+                <label class="form-label mb-1"><small>📝 Minimum Word Count</small></label>
+                <input type="number" name="word" class="form-control form-control-sm mb-2" value="{{ filters.get('word', 0) }}" step="100">
+
+                <input type="text" name="quiz" class="form-control form-control-sm mb-2" placeholder="🔢 AR Quiz Number" value="{{ filters.get('quiz', '') }}">
+                <input type="text" name="series" class="form-control form-control-sm mb-2" placeholder="🔗 Series" value="{{ filters.get('series', '') }}">
+                <input type="text" name="topic" class="form-control form-control-sm mb-2" placeholder="🏷️ Topic" value="{{ filters.get('topic', '') }}">
+
+                <label class="form-label mb-1"><small>📊 ATOS Book Level Range</small></label>
+                <div class="d-flex gap-2 mb-3">
+                    <input type="number" step="0.1" name="ar_min" class="form-control form-control-sm" value="{{ filters.get('ar_min', 0.0) }}">
+                    <span class="align-self-center">-</span>
+                    <input type="number" step="0.1" name="ar_max" class="form-control form-control-sm" value="{{ filters.get('ar_max', 12.0) }}">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters</button>
             </form>
         </div>
 
         <div class="col-md-9 p-4">
-            <h2 class="mb-4">📚 Book Gallery</h2>
-            <div class="row">
-                {% for orig_idx, row in books.iterrows() %}
-                <div class="col-md-4">
-                    <div class="book-tile">
-                        <div>
-                            <div class="cover-container">
-                                {% if row['_cover_url'] %}
-                                    <img class="cover-img" src="{{ row['_cover_url'] }}">
-                                {% else %}
-                                    <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em;">No Book Cover Available</div>
-                                {% endif %}
+            <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" id="gallery-tab" data-bs-toggle="tab" data-bs-target="#gallery-view">📚 Book Gallery</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="level-tab" data-bs-toggle="tab" data-bs-target="#level-view">📊 Level Distribution</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="top-tab" data-bs-toggle="tab" data-bs-target="#top-view">🏆 Top Rated</button>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="gallery-view">
+                    <button class="blind-box-btn mb-4 text-center">🎁 Open Mystery Book Blind Box</button>
+
+                    <div class="row">
+                        {% for orig_idx, row in books.iterrows() %}
+                        {% set title = row.iloc[idx['title']] %}
+                        <div class="col-md-4">
+                            <div class="book-tile">
+                                <div>
+                                    <div class="cover-container">
+                                        {% if row['_cover_url'] %}
+                                            <img class="cover-img" src="{{ row['_cover_url'] }}">
+                                        {% else %}
+                                            <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em; height: 120px; width: 100%; display: flex; align-items: center; justify-content: center;">No Book Cover Available</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="tile-title">《{{ title }}》</div>
+                                    <div style="color:#666; font-size:0.85em;" class="mb-2">{{ row.iloc[idx['author']] }}</div>
+                                </div>
+                                <div class="tag-container">
+                                    <span class="tag tag-ar">ATOS {{ row.iloc[idx['ar']] }}</span>
+                                    <span class="tag tag-word">{{ "{:,}".format(row.iloc[idx['word']]) }} Words</span>
+                                    <span class="tag tag-fnf">{{ row.iloc[idx['fnf']] }}</span>
+                                    <span class="tag tag-quiz">Q: {{ row.iloc[idx['quiz']] }}</span>
+                                    <span class="tag tag-il">{{ row.iloc[idx['il']] }}</span>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <form action="{{ url_for('toggle_favorite') }}" method="POST">
+                                        <input type="hidden" name="title" value="{{ title }}">
+                                        <button type="submit" class="fav-btn">
+                                            {% if title in favorites %}❤️{% else %}🤍{% endif %}
+                                        </button>
+                                    </form>
+                                    <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-secondary btn-sm flex-grow-1">View Details</a>
+                                </div>
                             </div>
-                            <div class="tile-title">《{{ row.iloc[idx['title']] }}》</div>
-                            <div style="color:#666; font-size:0.85em;">{{ row.iloc[idx['author']] }}</div>
                         </div>
-                        <div class="tag-container">
-                            <span class="tag tag-ar">ATOS {{ row.iloc[idx['ar']] }}</span>
-                            <span class="tag tag-word">{{ "{:,}".format(row.iloc[idx['word']]) }} Words</span>
-                            <span class="tag tag-fnf">{{ row.iloc[idx['fnf']] }}</span>
-                            <span class="tag tag-quiz">Q: {{ row.iloc[idx['quiz']] }}</span>
-                            <span class="tag tag-il">{{ row.iloc[idx['il']] }}</span>
-                        </div>
-                        <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-primary btn-sm w-100">View Details</a>
+                        {% endfor %}
+                    </div>
+
+                    <div class="pagination-container border-top pt-3">
+                        <a href="{{ url_for('index', page=1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}">First</a>
+                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}">Previous</a>
+                        
+                        <form method="GET" action="/" class="d-inline-flex gap-1">
+                            {% for key, val in filters.items() if key != 'page' %}
+                                <input type="hidden" name="{{ key }}" value="{{ val }}">
+                            {% endfor %}
+                            <input type="text" name="page" class="page-input" value="{{ page }}">
+                            <button type="submit" class="btn btn-light btn-sm">Go</button>
+                        </form>
+
+                        <span class="mx-2">Page <b>{{ page }}</b> of {{ total_pages }} &nbsp;•&nbsp; ({{ total_books }} total books)</span>
+
+                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}">Next</a>
+                        <a href="{{ url_for('index', page=total_pages, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}">Last</a>
                     </div>
                 </div>
-                {% endfor %}
-            </div>
 
-            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                <span>Page <b>{{ page }}</b> of {{ total_pages }} ({{ total_books }} total books)</span>
-                <div>
-                    {% if page > 1 %}
-                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-sm btn-secondary">Previous</a>
-                    {% endif %}
-                    {% if page < total_pages %}
-                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-sm btn-secondary">Next</a>
+                <div class="tab-pane fade" id="level-view">
+                    <h4 class="mb-3">📊 ATOS Book Level Distribution</h4>
+                    <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2d1b0;">
+                        <canvas id="levelChart" style="max-height: 400px;"></canvas>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="top-view">
+                    <h3 class="mb-3">🏆 Your Favorites</h3>
+                    {% if favorites %}
+                        <div class="list-group">
+                            {% for fav_title in favorites %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>⭐ <b>{{ fav_title }}</b></span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-light border">No favorites yet, go click ❤️!</div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Initialize Chart.js Level Distribution
+    const ctx = document.getElementById('levelChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: {{ level_counts.keys() | list | tojson }},
+                datasets: [{
+                    label: 'Book Count',
+                    data: {{ level_counts.values() | list | tojson }},
+                    backgroundColor: '#0066cc'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
 </body>
 </html>
