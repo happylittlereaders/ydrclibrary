@@ -1,1 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>《{{ row.iloc[idx['title']] }}》- Book Details</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background-color: #fdf6e3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .info-card { background: white; padding: 15px; border-radius: 12px; border-left: 6px solid #ff6e40; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .comment-box { background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #eee; border-left: 5px solid #1e3d59; }
+        .comment-meta { color: #888; font-size: 0.8em; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .recommendation-box { background: #fffcf5; padding: 25px; border-radius: 15px; border: 2px dashed #ff6e40; margin-top: 15px; }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mb-3">⬅️ Back to Library</a>
 
+    <h1>📖 {{ row.iloc[idx['title']] }}</h1>
+
+    <div class="row mt-4">
+        <div class="col-md-3">
+            {% if row['_cover_url'] %}
+                <img src="{{ row['_cover_url'] }}" class="img-fluid rounded shadow" alt="Book Cover">
+            {% else %}
+                <div class="p-5 bg-light text-center border rounded text-muted">
+                    <div style="font-size: 2rem;">📚</div>
+                    <div>No Cover Available</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-9">
+            <div class="row">
+                <div class="col-md-4"><div class="info-card"><small>👤 Author</small><br><b>{{ row.iloc[idx['author']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>📚 Genre</small><br><b>{{ row.iloc[idx['fnf']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>🎯 Interest Level</small><br><b>{{ row.iloc[idx['il']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>📊 ATOS Book Level</small><br><b>{{ row.iloc[idx['ar']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>🔢 Quiz No.</small><br><b>{{ row.iloc[idx['quiz']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>📝 Word Count</small><br><b>{{ "{:,}".format(row.iloc[idx['word']]) }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>🔗 Series</small><br><b>{{ row.iloc[idx['series']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>🏷️ Topic</small><br><b>{{ row.iloc[idx['topic']] }}</b></div></div>
+                <div class="col-md-4"><div class="info-card"><small>🙋 Recommender</small><br><b>{{ row.iloc[idx['rec']] }}</b></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>🌟 Recommendation Details</h4>
+        <div class="btn-group mb-2" role="group">
+            <button type="button" class="btn btn-outline-danger" onclick="toggleLang('CN')">CN 中文理由</button>
+            <button type="button" class="btn btn-outline-primary" onclick="toggleLang('EN')">US English</button>
+        </div>
+        <div id="rec-cn" class="recommendation-box" style="display: none;">{{ row.iloc[idx['cn']] }}</div>
+        <div id="rec-en" class="recommendation-box">{{ row.iloc[idx['en']] }}</div>
+    </div>
+
+    <hr class="my-4">
+
+    <h3>💬 Comment Area</h3>
+
+    {% if user %}
+        <form action="{{ url_for('add_comment') }}" method="POST" class="mb-4">
+            <input type="hidden" name="book_title" value="{{ row.iloc[idx['title']] }}">
+            <input type="hidden" name="book_idx" value="{{ book_idx }}">
+            <div class="mb-2">
+                <textarea name="text" class="form-control" rows="3" placeholder="Write a comment..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Post Comment</button>
+        </form>
+    {% else %}
+        <div class="alert alert-info">🔒 Guest mode is view-only. Log in on the main page to post comments.</div>
+    {% endif %}
+
+    <div class="comments-list">
+        {% for c in comments %}
+            <div class="comment-box">
+                <div class="comment-meta">
+                    <span>👤 {{ c.author_nick or 'Anonymous' }}</span>
+                    <span>📅 {{ c.time }}</span>
+                </div>
+                <div>{{ c.text }}</div>
+            </div>
+        {% else %}
+            <p class="text-muted">No comments yet. Be the first to leave one!</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    function toggleLang(lang) {
+        document.getElementById('rec-cn').style.display = (lang === 'CN') ? 'block' : 'none';
+        document.getElementById('rec-en').style.display = (lang === 'EN') ? 'block' : 'none';
+    }
+</script>
+</body>
+</html>
