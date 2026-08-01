@@ -1,1 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Library · Flagship Edition</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background-color: #fdf6e3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .sidebar { background-color: #f0f2f6; border-right: 1px solid #e6e9ef; min-height: 100vh; padding: 20px; }
+        .sidebar-title { color: #1e3d59; font-size: 1.3em; font-weight: bold; border-bottom: 2px solid #1e3d59; margin-bottom: 15px; margin-top: 15px; }
+        
+        .book-tile {
+            background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2d1b0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 400px; box-sizing: border-box;
+            display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 20px;
+        }
+        .tile-title { 
+            color: #1e3d59; font-size: 1.1em; font-weight: bold; margin-bottom: 4px; 
+            line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+            overflow: hidden; overflow-wrap: break-word; word-wrap: break-word;
+        }
+        .cover-container { display: flex; justify-content: center; align-items: center; margin-bottom: 10px; height: 140px; }
+        .cover-img { max-height: 140px; max-width: 100%; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); object-fit: contain; }
+        
+        .tag-container { margin-top: auto; display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; }
+        .tag { padding: 3px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; color: white; }
+        .tag-ar { background: #ff6e40; }
+        .tag-word { background: #1e3d59; }
+        .tag-fnf { background: #2a9d8f; }
+        .tag-quiz { background: #6d597a; }
+        .tag-il { background: #8888cc; }
+        .user-badge { padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; display: inline-block; color: white; }
+        .badge-owner { background-color: #ffd700; color: #000; }
+        .badge-admin { background-color: #ff6e40; }
+        .badge-user { background-color: #2a9d8f; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3 sidebar">
+            <img src="{{ url_for('static', filename='YDRC-logo.png') }}" class="img-fluid mb-3" alt="Logo" onerror="this.style.display='none'">
+            
+            <div class="sidebar-title">👤 User Center</div>
+            {% if user %}
+                <span class="user-badge badge-{{ user.role }}">{{ user.role | uppercase }}</span>
+                <div>Hello, <b>{{ user.nickname }}</b></div>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-secondary mt-2">👋 Log Out</a>
+            {% else %}
+                <form action="{{ url_for('login') }}" method="POST" class="mb-3">
+                    <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email" required>
+                    <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">🚀 Login</button>
+                </form>
+            {% endif %}
 
+            <div class="sidebar-title">🔍 Search Center</div>
+            <form method="GET" action="/">
+                <input type="text" name="fuzzy" class="form-control form-control-sm mb-2" placeholder="💡 Fuzzy Search..." value="{{ filters.get('fuzzy', '') }}">
+                <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="📖 Title" value="{{ filters.get('title', '') }}">
+                <input type="text" name="author" class="form-control form-control-sm mb-2" placeholder="👤 Author" value="{{ filters.get('author', '') }}">
+                <select name="fnf" class="form-select form-select-sm mb-2">
+                    <option value="All">All Genres</option>
+                    <option value="Fiction">Fiction</option>
+                    <option value="Nonfiction">Nonfiction</option>
+                </select>
+                <button type="submit" class="btn btn-dark btn-sm w-100 mt-2">Filter Books</button>
+            </form>
+        </div>
+
+        <div class="col-md-9 p-4">
+            <h2 class="mb-4">📚 Book Gallery</h2>
+            <div class="row">
+                {% for orig_idx, row in books.iterrows() %}
+                <div class="col-md-4">
+                    <div class="book-tile">
+                        <div>
+                            <div class="cover-container">
+                                {% if row['_cover_url'] %}
+                                    <img class="cover-img" src="{{ row['_cover_url'] }}">
+                                {% else %}
+                                    <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em;">No Book Cover Available</div>
+                                {% endif %}
+                            </div>
+                            <div class="tile-title">《{{ row.iloc[idx['title']] }}》</div>
+                            <div style="color:#666; font-size:0.85em;">{{ row.iloc[idx['author']] }}</div>
+                        </div>
+                        <div class="tag-container">
+                            <span class="tag tag-ar">ATOS {{ row.iloc[idx['ar']] }}</span>
+                            <span class="tag tag-word">{{ "{:,}".format(row.iloc[idx['word']]) }} Words</span>
+                            <span class="tag tag-fnf">{{ row.iloc[idx['fnf']] }}</span>
+                            <span class="tag tag-quiz">Q: {{ row.iloc[idx['quiz']] }}</span>
+                            <span class="tag tag-il">{{ row.iloc[idx['il']] }}</span>
+                        </div>
+                        <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-primary btn-sm w-100">View Details</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                <span>Page <b>{{ page }}</b> of {{ total_pages }} ({{ total_books }} total books)</span>
+                <div>
+                    {% if page > 1 %}
+                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-sm btn-secondary">Previous</a>
+                    {% endif %}
+                    {% if page < total_pages %}
+                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-sm btn-secondary">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
