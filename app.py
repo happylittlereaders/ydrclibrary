@@ -5,7 +5,6 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 import hashlib
 import re
-import requests
 import json
 import os
 import random
@@ -82,27 +81,13 @@ def get_user_role(email):
     return "guest"
 
 # ==========================================
-# 2. Data Loading & Cover Art Service
+# 2. Data Loading Service (Optimized)
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/1wqamTRHb2vUHU_JXFq38NlYy6uQUguEHbuv0XQfdW5M/export?format=csv&gid=897583843"
 _cached_df = None
 
-def fetch_openlibrary_cover(title, author):
-    """Search OpenLibrary API for cover image."""
-    try:
-        query = f"{title} {author}".replace(" ", "+")
-        api_url = f"https://openlibrary.org/search.json?q={query}"
-        res = requests.get(api_url, timeout=2).json()
-        if res.get("docs"):
-            for doc in res["docs"]:
-                if "cover_i" in doc:
-                    return f"https://covers.openlibrary.org/b/id/{doc['cover_i']}-M.jpg"
-    except Exception:
-        pass
-    return ""
-
 def load_data():
-    """Load Google Sheet dataset, clean numerical values, and pre-cache covers."""
+    """Load Google Sheet dataset and clean numerical values instantly without blocking HTTP calls."""
     global _cached_df
     if _cached_df is not None:
         return _cached_df
@@ -134,12 +119,6 @@ def load_data():
             )
 
         df['_search_context'] = df.apply(build_search_context, axis=1)
-
-        # Pre-fetch cover images
-        cover_urls = []
-        for _, row in df.iterrows():
-            cover_urls.append(fetch_openlibrary_cover(row.iloc[c['title']], row.iloc[c['author']]))
-        df['_cover_url'] = cover_urls
 
         _cached_df = (df, c)
         return _cached_df
