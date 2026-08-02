@@ -6,49 +6,215 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #fdf6e3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .sidebar { background-color: #f0f2f6; border-right: 1px solid #e6e9ef; min-height: 100vh; padding: 20px; }
-        .sidebar-title { color: #1e3d59; font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #1e3d59; margin-bottom: 15px; margin-top: 20px; }
-        
-        .nav-tabs .nav-link { color: #555; font-weight: 500; border: none; font-size: 1.05em; margin-right: 15px; }
-        .nav-tabs .nav-link.active { color: #ff6e40; background: transparent; border-bottom: 3px solid #ff6e40; font-weight: bold; }
-        
+        /* BASE & COLOR PALETTE MATCHING STREAMLIT ORIGINAL */
+        body { 
+            background-color: #fdf6e3; 
+            color: #31333f;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
+
+        .sidebar { 
+            background-color: #f0f2f6; 
+            border-right: 1px solid #e6e9ef; 
+            min-height: 100vh; 
+            padding: 20px; 
+        }
+
+        .sidebar-title { 
+            color: #1e3d59; 
+            font-size: 1.05em; 
+            font-weight: bold; 
+            border-bottom: 2px solid #1e3d59; 
+            margin-bottom: 12px; 
+            margin-top: 18px; 
+            padding-bottom: 4px;
+        }
+
+        /* PRIMARY & SECONDARY BUTTON STYLING */
+        .btn-primary {
+            background-color: #ff6e40 !important;
+            border-color: #ff6e40 !important;
+            color: #ffffff !important;
+            font-weight: 600;
+            border-radius: 8px;
+            padding: 6px 16px;
+        }
+
+        .btn-primary:hover {
+            background-color: #e65b30 !important;
+            border-color: #e65b30 !important;
+        }
+
+        .btn-success {
+            background-color: #2a9d8f !important;
+            border-color: #2a9d8f !important;
+            font-weight: 600;
+            border-radius: 8px;
+        }
+
+        .btn-warning {
+            background-color: #e9c46a !important;
+            border-color: #e9c46a !important;
+            color: #264653 !important;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        /* BLIND BOX BUTTON MATCHING ORIGINAL SPECIFICATION */
         .blind-box-btn { 
-            background: #ffffff; border: 1px solid #e2d1b0; border-radius: 8px; 
-            padding: 12px; font-weight: 500; width: 100%; color: #333; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02); text-decoration: none; 
+            background-color: #ffffff; 
+            border: 1px solid #e2d1b0; 
+            border-radius: 10px; 
+            padding: 12px 20px; 
+            font-weight: 600; 
+            color: #1e3d59; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03); 
+            text-decoration: none; 
+            transition: all 0.2s ease-in-out;
+            font-size: 1rem;
         }
-        .blind-box-btn:hover { background: #fffcf5; border-color: #ff6e40; color: #ff6e40; }
 
+        .blind-box-btn:hover { 
+            background-color: #fffaf0; 
+            border-color: #ff6e40; 
+            color: #ff6e40; 
+            box-shadow: 0 4px 10px rgba(255, 110, 64, 0.15);
+        }
+
+        /* TAB NAVIGATION STYLING */
+        .nav-tabs {
+            border-bottom: 2px solid #e2d1b0;
+        }
+
+        .nav-tabs .nav-link { 
+            color: #555555; 
+            font-weight: 600; 
+            border: none; 
+            font-size: 1.05em; 
+            margin-right: 20px; 
+            padding: 8px 16px;
+        }
+
+        .nav-tabs .nav-link.active { 
+            color: #ff6e40; 
+            background: transparent; 
+            border-bottom: 3px solid #ff6e40; 
+            font-weight: bold; 
+        }
+
+        /* BOOK TILE & CARDS */
         .book-tile {
-            background: white; padding: 18px; border-radius: 12px; border: 1px solid #e2d1b0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.03); height: 410px;
-            display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 20px;
+            background: #ffffff; 
+            padding: 18px; 
+            border-radius: 12px; 
+            border: 1px solid #e2d1b0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.03); 
+            height: 420px;
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            margin-bottom: 24px;
+            transition: transform 0.15s ease-in-out;
         }
-        .tile-title { 
-            color: #1e3d59; font-size: 1.1em; font-weight: bold; margin-bottom: 2px; 
-            line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden; text-overflow: ellipsis;
-        }
-        .cover-container { display: flex; justify-content: center; align-items: center; margin-bottom: 10px; height: 140px; }
-        .cover-img { max-height: 140px; max-width: 100%; border-radius: 6px; object-fit: contain; }
-        
-        .tag-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; margin-bottom: 12px; }
-        .tag { padding: 3px 7px; border-radius: 4px; font-size: 0.72em; font-weight: bold; color: white; }
-        .tag-ar { background: #ff6e40; }
-        .tag-word { background: #1e3d59; }
-        .tag-fnf { background: #2a9d8f; }
-        .tag-quiz { background: #6d597a; }
-        .tag-il { background: #8888cc; }
 
-        .fav-btn { background: #fff; border: 1px solid #dee2e6; color: #ff4d4f; border-radius: 6px; padding: 4px 12px; }
-        .user-badge { padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; color: white; }
-        .badge-owner { background-color: #ffd700; color: #000; }
+        .book-tile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+        }
+
+        .tile-title { 
+            color: #1e3d59; 
+            font-size: 1.05em; 
+            font-weight: 700; 
+            margin-bottom: 4px; 
+            line-height: 1.3; 
+            display: -webkit-box; 
+            -webkit-line-clamp: 2; 
+            -webkit-box-orient: vertical;
+            overflow: hidden; 
+            text-overflow: ellipsis;
+        }
+
+        .cover-container { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            margin-bottom: 12px; 
+            height: 140px; 
+        }
+
+        .cover-img { 
+            max-height: 140px; 
+            max-width: 100%; 
+            border-radius: 6px; 
+            object-fit: contain; 
+        }
+
+        /* TAG BADGES COLOR MATCHING */
+        .tag-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 5px; 
+            margin-top: auto; 
+            margin-bottom: 12px; 
+        }
+
+        .tag { 
+            padding: 4px 8px; 
+            border-radius: 6px; 
+            font-size: 0.72em; 
+            font-weight: 700; 
+            color: #ffffff; 
+        }
+
+        .tag-ar { background-color: #ff6e40; }
+        .tag-word { background-color: #1e3d59; }
+        .tag-fnf { background-color: #2a9d8f; }
+        .tag-quiz { background-color: #6d597a; }
+        .tag-il { background-color: #8888cc; }
+
+        .fav-btn { 
+            background: #ffffff; 
+            border: 1px solid #ced4da; 
+            color: #ff4d4f; 
+            border-radius: 8px; 
+            padding: 4px 12px; 
+            transition: background 0.1s;
+        }
+
+        .fav-btn:hover {
+            background-color: #fff0f0;
+        }
+
+        /* USER ROLE BADGES */
+        .user-badge { 
+            padding: 3px 10px; 
+            border-radius: 12px; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            color: #ffffff; 
+        }
+        .badge-owner { background-color: #ffd700; color: #000000; }
         .badge-admin { background-color: #ff6e40; }
         .badge-user { background-color: #2a9d8f; }
-        
-        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-top: 20px; }
-        .page-input { width: 50px; text-align: center; border-radius: 6px; border: 1px solid #ced4da; padding: 4px; }
+
+        /* PAGINATION STYLING */
+        .pagination-container { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 8px; 
+            margin-top: 20px; 
+            padding-top: 20px; 
+        }
+
+        .page-input { 
+            width: 50px; 
+            text-align: center; 
+            border-radius: 6px; 
+            border: 1px solid #ced4da; 
+            padding: 4px; 
+        }
     </style>
 </head>
 <body>
@@ -96,11 +262,11 @@
                 </div>
 
                 <div class="mt-3">
-                    <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#resetPasswordCollapse">
+                    <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#resetPasswordCollapse">
                         🔑 Forgot/Reset Password
                     </button>
                     <div class="collapse mt-2" id="resetPasswordCollapse">
-                        <div class="card card-body p-2" style="font-size: 0.85em;">
+                        <div class="card card-body p-2" style="font-size: 0.85em; background-color: #ffffff;">
                             <small class="text-muted mb-2">Verify Project ID to reset account</small>
                             <form action="{{ url_for('reset_password') }}" method="POST">
                                 <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Account Email" required>
@@ -123,14 +289,14 @@
                 <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="📖 Title" value="{{ filters.get('title', '') }}">
                 <input type="text" name="author" class="form-control form-control-sm mb-2" placeholder="👤 Author" value="{{ filters.get('author', '') }}">
                 
-                <label class="form-label mb-1"><small>📚 Genre</small></label>
+                <label class="form-label mb-1"><small class="fw-bold text-secondary">📚 Genre</small></label>
                 <select name="fnf" class="form-select form-select-sm mb-2">
                     <option value="All" {% if filters.get('fnf')=='All' %}selected{% endif %}>All</option>
                     <option value="Fiction" {% if filters.get('fnf')=='Fiction' %}selected{% endif %}>Fiction</option>
                     <option value="Nonfiction" {% if filters.get('fnf')=='Nonfiction' %}selected{% endif %}>Nonfiction</option>
                 </select>
 
-                <label class="form-label mb-1"><small>🎯 Interest Level</small></label>
+                <label class="form-label mb-1"><small class="fw-bold text-secondary">🎯 Interest Level</small></label>
                 <select name="il" class="form-select form-select-sm mb-2">
                     <option value="All">All</option>
                     {% for opt in il_options %}
@@ -138,14 +304,14 @@
                     {% endfor %}
                 </select>
 
-                <label class="form-label mb-1"><small>📝 Minimum Word Count</small></label>
+                <label class="form-label mb-1"><small class="fw-bold text-secondary">📝 Minimum Word Count</small></label>
                 <input type="number" name="word" class="form-control form-control-sm mb-2" value="{{ filters.get('word', 0) }}" step="100">
 
                 <input type="text" name="quiz" class="form-control form-control-sm mb-2" placeholder="🔢 AR Quiz Number" value="{{ filters.get('quiz', '') }}">
                 <input type="text" name="series" class="form-control form-control-sm mb-2" placeholder="🔗 Series" value="{{ filters.get('series', '') }}">
                 <input type="text" name="topic" class="form-control form-control-sm mb-2" placeholder="🏷️ Topic" value="{{ filters.get('topic', '') }}">
 
-                <label class="form-label mb-1"><small>📊 ATOS Book Level Range</small></label>
+                <label class="form-label mb-1"><small class="fw-bold text-secondary">📊 ATOS Book Level Range</small></label>
                 <div class="d-flex gap-2 mb-3">
                     <input type="number" step="0.1" name="ar_min" class="form-control form-control-sm" value="{{ filters.get('ar_min', 0.0) }}">
                     <span class="align-self-center">-</span>
@@ -185,7 +351,7 @@
                                         {% if row['_cover_url'] %}
                                             <img class="cover-img" src="{{ row['_cover_url'] }}">
                                         {% else %}
-                                            <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em; height: 120px; width: 100%; display: flex; align-items: center; justify-content: center;">No Book Cover Available</div>
+                                            <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em; height: 120px; width: 100%; display: flex; align-items: center; justify-content: center; background: #fafafa;">No Book Cover Available</div>
                                         {% endif %}
                                     </div>
                                     <div class="tile-title">《{{ title }}》</div>
@@ -205,7 +371,7 @@
                                             {% if title in favorites %}❤️{% else %}🤍{% endif %}
                                         </button>
                                     </form>
-                                    <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-secondary btn-sm flex-grow-1">View Details</a>
+                                    <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-secondary btn-sm flex-grow-1" style="border-radius: 8px;">View Details</a>
                                 </div>
                             </div>
                         </div>
@@ -213,43 +379,43 @@
                     </div>
 
                     <div class="pagination-container border-top pt-3">
-                        <a href="{{ url_for('index', page=1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}">First</a>
-                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}">Previous</a>
+                        <a href="{{ url_for('index', page=1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da;">First</a>
+                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da;">Previous</a>
                         
                         <form method="GET" action="/" class="d-inline-flex gap-1">
                             {% for key, val in filters.items() if key != 'page' %}
                                 <input type="hidden" name="{{ key }}" value="{{ val }}">
                             {% endfor %}
                             <input type="text" name="page" class="page-input" value="{{ page }}">
-                            <button type="submit" class="btn btn-light btn-sm">Go</button>
+                            <button type="submit" class="btn btn-light btn-sm" style="border: 1px solid #ced4da;">Go</button>
                         </form>
 
-                        <span class="mx-2">Page <b>{{ page }}</b> of {{ total_pages }} &nbsp;•&nbsp; ({{ total_books }} total books)</span>
+                        <span class="mx-2" style="font-size: 0.9em;">Page <b>{{ page }}</b> of {{ total_pages }} &nbsp;•&nbsp; ({{ total_books }} total books)</span>
 
-                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}">Next</a>
-                        <a href="{{ url_for('index', page=total_pages, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}">Last</a>
+                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da;">Next</a>
+                        <a href="{{ url_for('index', page=total_pages, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da;">Last</a>
                     </div>
                 </div>
 
                 <div class="tab-pane fade" id="level-view">
-                    <h4 class="mb-3">📊 ATOS Book Level Distribution</h4>
+                    <h4 class="mb-3" style="color: #1e3d59;">📊 ATOS Book Level Distribution</h4>
                     <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2d1b0;">
                         <canvas id="levelChart" style="max-height: 400px;"></canvas>
                     </div>
                 </div>
 
                 <div class="tab-pane fade" id="top-view">
-                    <h3 class="mb-3">🏆 Your Favorites</h3>
+                    <h3 class="mb-3" style="color: #1e3d59;">🏆 Your Favorites</h3>
                     {% if favorites %}
                         <div class="list-group">
                             {% for fav_title in favorites %}
-                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div class="list-group-item d-flex justify-content-between align-items-center" style="border-radius: 8px; margin-bottom: 8px;">
                                     <span>⭐ <b>{{ fav_title }}</b></span>
                                 </div>
                             {% endfor %}
                         </div>
                     {% else %}
-                        <div class="alert alert-light border">No favorites yet, go click ❤️!</div>
+                        <div class="alert alert-light border" style="border-color: #e2d1b0 !important;">No favorites yet, go click ❤️!</div>
                     {% endif %}
                 </div>
             </div>
@@ -268,7 +434,7 @@
                 datasets: [{
                     label: 'Book Count',
                     data: {{ level_counts.values() | list | tojson }},
-                    backgroundColor: '#0066cc'
+                    backgroundColor: '#ff6e40'
                 }]
             },
             options: { responsive: true, maintainAspectRatio: false }
