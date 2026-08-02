@@ -388,11 +388,10 @@
                             <div class="book-tile">
                                 <div>
                                     <div class="cover-container">
-                                        {% if row['_cover_url'] %}
-                                            <img class="cover-img" src="{{ row['_cover_url'] }}">
-                                        {% else %}
-                                            <div class="text-center text-muted p-2 border rounded" style="font-size:0.8em; height: 120px; width: 100%; display: flex; align-items: center; justify-content: center; background: #fafafa;">No Book Cover Available</div>
-                                        {% endif %}
+                                        <img class="cover-img" 
+                                             src="https://covers.openlibrary.org/b/isbn/{{ row.iloc[idx['quiz']] }}-M.jpg" 
+                                             onerror="this.onerror=null; this.src='https://via.placeholder.com/100x140?text=No+Cover';" 
+                                             alt="{{ title }}">
                                     </div>
                                     <div class="tile-title">《{{ title }}》</div>
                                     <div style="color:#666; font-size:0.85em;" class="mb-2">{{ row.iloc[idx['author']] }}</div>
