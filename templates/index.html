@@ -10,11 +10,15 @@
         .sidebar { background-color: #f0f2f6; border-right: 1px solid #e6e9ef; min-height: 100vh; padding: 20px; }
         .sidebar-title { color: #1e3d59; font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #1e3d59; margin-bottom: 15px; margin-top: 20px; }
         
-        /* Tab Navigation Styling */
         .nav-tabs .nav-link { color: #555; font-weight: 500; border: none; font-size: 1.05em; margin-right: 15px; }
         .nav-tabs .nav-link.active { color: #ff6e40; background: transparent; border-bottom: 3px solid #ff6e40; font-weight: bold; }
         
-        .blind-box-btn { background: #ffffff; border: 1px solid #e2d1b0; border-radius: 8px; padding: 12px; font-weight: 500; width: 100%; color: #333; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .blind-box-btn { 
+            background: #ffffff; border: 1px solid #e2d1b0; border-radius: 8px; 
+            padding: 12px; font-weight: 500; width: 100%; color: #333; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02); text-decoration: none; 
+        }
+        .blind-box-btn:hover { background: #fffcf5; border-color: #ff6e40; color: #ff6e40; }
 
         .book-tile {
             background: white; padding: 18px; border-radius: 12px; border: 1px solid #e2d1b0;
@@ -43,7 +47,6 @@
         .badge-admin { background-color: #ff6e40; }
         .badge-user { background-color: #2a9d8f; }
         
-        /* Pagination Bar */
         .pagination-container { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; padding-top: 20px; }
         .page-input { width: 50px; text-align: center; border-radius: 6px; border: 1px solid #ced4da; padding: 4px; }
     </style>
@@ -97,7 +100,7 @@
                         🔑 Forgot/Reset Password
                     </button>
                     <div class="collapse mt-2" id="resetPasswordCollapse">
-                        <div class="card card-body p-2 style="font-size: 0.85em;">
+                        <div class="card card-body p-2" style="font-size: 0.85em;">
                             <small class="text-muted mb-2">Verify Project ID to reset account</small>
                             <form action="{{ url_for('reset_password') }}" method="POST">
                                 <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Account Email" required>
@@ -168,7 +171,9 @@
 
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="gallery-view">
-                    <button class="blind-box-btn mb-4 text-center">🎁 Open Mystery Book Blind Box</button>
+                    <a href="{{ url_for('blind_box') }}" class="btn blind-box-btn mb-4 text-center d-block">
+                        🎁 Open Mystery Book Blind Box
+                    </a>
 
                     <div class="row">
                         {% for orig_idx, row in books.iterrows() %}
@@ -254,7 +259,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Initialize Chart.js Level Distribution
     const ctx = document.getElementById('levelChart');
     if (ctx) {
         new Chart(ctx, {
