@@ -6,7 +6,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* BASE & COLOR PALETTE MATCHING STREAMLIT ORIGINAL */
+        /* BASE & COLOR PALETTE */
         body { 
             background-color: #fdf6e3; 
             color: #31333f;
@@ -17,7 +17,7 @@
             background-color: #f0f2f6; 
             border-right: 1px solid #e6e9ef; 
             min-height: 100vh; 
-            padding: 20px; 
+            padding: 24px 20px; 
         }
 
         .sidebar-title { 
@@ -25,47 +25,77 @@
             font-size: 1.05em; 
             font-weight: bold; 
             border-bottom: 2px solid #1e3d59; 
-            margin-bottom: 12px; 
-            margin-top: 18px; 
+            margin-bottom: 16px; 
+            margin-top: 22px; 
             padding-bottom: 4px;
         }
 
-        /* PRIMARY & SECONDARY BUTTON STYLING */
+        /* FORM INPUT ENHANCEMENTS & SPACING */
+        .sidebar .form-control, 
+        .sidebar .form-select {
+            padding: 8px 12px;
+            font-size: 0.9em;
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            margin-bottom: 16px !important;
+        }
+
+        .sidebar .form-label {
+            margin-bottom: 4px;
+        }
+
+        /* BUTTON STYLING (MATCHING PAGE CHANGE BUTTON LOOK) */
         .btn-primary {
-            background-color: #ff6e40 !important;
-            border-color: #ff6e40 !important;
-            color: #ffffff !important;
+            background-color: #ffffff !important;
+            border: 1px solid #ff6e40 !important;
+            color: #ff6e40 !important;
             font-weight: 600;
             border-radius: 8px;
-            padding: 6px 16px;
+            padding: 8px 16px;
+            transition: all 0.15s ease-in-out;
         }
 
         .btn-primary:hover {
-            background-color: #e65b30 !important;
-            border-color: #e65b30 !important;
+            background-color: #ff6e40 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 6px rgba(255, 110, 64, 0.2);
         }
 
         .btn-success {
-            background-color: #2a9d8f !important;
-            border-color: #2a9d8f !important;
+            background-color: #ffffff !important;
+            border: 1px solid #2a9d8f !important;
+            color: #2a9d8f !important;
             font-weight: 600;
             border-radius: 8px;
+            padding: 8px 16px;
+            transition: all 0.15s ease-in-out;
+        }
+
+        .btn-success:hover {
+            background-color: #2a9d8f !important;
+            color: #ffffff !important;
         }
 
         .btn-warning {
-            background-color: #e9c46a !important;
-            border-color: #e9c46a !important;
+            background-color: #ffffff !important;
+            border: 1px solid #e9c46a !important;
             color: #264653 !important;
             font-weight: bold;
             border-radius: 8px;
+            padding: 8px 16px;
+            transition: all 0.15s ease-in-out;
         }
 
-        /* BLIND BOX BUTTON MATCHING ORIGINAL SPECIFICATION */
+        .btn-warning:hover {
+            background-color: #e9c46a !important;
+        }
+
+        /* BLIND BOX BUTTON */
         .blind-box-btn { 
             background-color: #ffffff; 
             border: 1px solid #e2d1b0; 
             border-radius: 10px; 
-            padding: 12px 20px; 
+            padding: 14px 20px; 
             font-weight: 600; 
             color: #1e3d59; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.03); 
@@ -105,7 +135,7 @@
         /* BOOK TILE & CARDS */
         .book-tile {
             background: #ffffff; 
-            padding: 18px; 
+            padding: 20px; 
             border-radius: 12px; 
             border: 1px solid #e2d1b0;
             box-shadow: 0 4px 8px rgba(0,0,0,0.03); 
@@ -150,7 +180,7 @@
             object-fit: contain; 
         }
 
-        /* TAG BADGES COLOR MATCHING */
+        /* TAG BADGES */
         .tag-container { 
             display: flex; 
             flex-wrap: wrap; 
@@ -198,7 +228,7 @@
         .badge-admin { background-color: #ff6e40; }
         .badge-user { background-color: #2a9d8f; }
 
-        /* PAGINATION STYLING */
+        /* PAGINATION BUTTONS */
         .pagination-container { 
             display: flex; 
             align-items: center; 
@@ -211,9 +241,9 @@
         .page-input { 
             width: 50px; 
             text-align: center; 
-            border-radius: 6px; 
+            border-radius: 8px; 
             border: 1px solid #ced4da; 
-            padding: 4px; 
+            padding: 6px; 
         }
     </style>
 </head>
@@ -231,9 +261,9 @@
                     <div><b>{{ user.nickname }}</b></div>
                     <span class="user-badge badge-{{ user.role }}">{{ user.role | upper }}</span>
                 </div>
-                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger w-100 mt-2">👋 Log Out</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger w-100 mt-2" style="border-radius: 8px;">👋 Log Out</a>
             {% else %}
-                <ul class="nav nav-pills nav-justified mb-2" id="authTabs" role="tablist">
+                <ul class="nav nav-pills nav-justified mb-3" id="authTabs" role="tablist">
                     <li class="nav-item">
                         <button class="nav-link active btn-sm" id="login-tab" data-bs-toggle="pill" data-bs-target="#login-panel">Log In</button>
                     </li>
@@ -245,18 +275,18 @@
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="login-panel">
                         <form action="{{ url_for('login') }}" method="POST">
-                            <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email" required>
-                            <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
-                            <button type="submit" class="btn btn-primary btn-sm w-100">🚀 Log In</button>
+                            <input type="email" name="email" class="form-control" placeholder="Email" required>
+                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                            <button type="submit" class="btn btn-primary w-100 mt-1">🚀 Log In</button>
                         </form>
                     </div>
 
                     <div class="tab-pane fade" id="register-panel">
                         <form action="{{ url_for('register') }}" method="POST">
-                            <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Email (Account ID)" required>
-                            <input type="text" name="nickname" class="form-control form-control-sm mb-2" placeholder="Nickname (Display Name)" required>
-                            <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="Password" required>
-                            <button type="submit" class="btn btn-success btn-sm w-100">✨ Create Account</button>
+                            <input type="email" name="email" class="form-control" placeholder="Email (Account ID)" required>
+                            <input type="text" name="nickname" class="form-control" placeholder="Nickname (Display Name)" required>
+                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                            <button type="submit" class="btn btn-success w-100 mt-1">✨ Create Account</button>
                         </form>
                     </div>
                 </div>
@@ -266,59 +296,69 @@
                         🔑 Forgot/Reset Password
                     </button>
                     <div class="collapse mt-2" id="resetPasswordCollapse">
-                        <div class="card card-body p-2" style="font-size: 0.85em; background-color: #ffffff;">
-                            <small class="text-muted mb-2">Verify Project ID to reset account</small>
+                        <div class="card card-body p-3" style="font-size: 0.85em; background-color: #ffffff; border-radius: 8px;">
+                            <small class="text-muted mb-2 d-block">Verify Project ID to reset account</small>
                             <form action="{{ url_for('reset_password') }}" method="POST">
-                                <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Account Email" required>
-                                <input type="text" name="project_id" class="form-control form-control-sm mb-2" placeholder="Project ID Verification" required>
-                                <input type="password" name="new_password" class="form-control form-control-sm mb-2" placeholder="New Password" required>
-                                <button type="submit" class="btn btn-warning btn-sm w-100">Confirm Reset</button>
+                                <input type="email" name="email" class="form-control" placeholder="Account Email" required>
+                                <input type="text" name="project_id" class="form-control" placeholder="Project ID Verification" required>
+                                <input type="password" name="new_password" class="form-control" placeholder="New Password" required>
+                                <button type="submit" class="btn btn-warning w-100 mt-1">Confirm Reset</button>
                             </form>
                         </div>
                     </div>
                 </div>
             {% endif %}
 
-            <hr class="my-3">
+            <hr class="my-4">
 
             <div class="sidebar-title">💡 Smart AI Search</div>
             <form method="GET" action="/">
-                <input type="text" name="fuzzy" class="form-control form-control-sm mb-3" placeholder="Enter concepts or keywords..." value="{{ filters.get('fuzzy', '') }}">
+                <label class="form-label"><small class="fw-bold text-secondary">Search Context / Keywords</small></label>
+                <input type="text" name="fuzzy" class="form-control" placeholder="Enter concepts or keywords..." value="{{ filters.get('fuzzy', '') }}">
 
                 <div class="sidebar-title">🔍 Filters</div>
-                <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="📖 Title" value="{{ filters.get('title', '') }}">
-                <input type="text" name="author" class="form-control form-control-sm mb-2" placeholder="👤 Author" value="{{ filters.get('author', '') }}">
                 
-                <label class="form-label mb-1"><small class="fw-bold text-secondary">📚 Genre</small></label>
-                <select name="fnf" class="form-select form-select-sm mb-2">
+                <label class="form-label"><small class="fw-bold text-secondary">📖 Title</small></label>
+                <input type="text" name="title" class="form-control" placeholder="Search by title..." value="{{ filters.get('title', '') }}">
+                
+                <label class="form-label"><small class="fw-bold text-secondary">👤 Author</small></label>
+                <input type="text" name="author" class="form-control" placeholder="Search by author..." value="{{ filters.get('author', '') }}">
+                
+                <label class="form-label"><small class="fw-bold text-secondary">📚 Genre</small></label>
+                <select name="fnf" class="form-select">
                     <option value="All" {% if filters.get('fnf')=='All' %}selected{% endif %}>All</option>
                     <option value="Fiction" {% if filters.get('fnf')=='Fiction' %}selected{% endif %}>Fiction</option>
                     <option value="Nonfiction" {% if filters.get('fnf')=='Nonfiction' %}selected{% endif %}>Nonfiction</option>
                 </select>
 
-                <label class="form-label mb-1"><small class="fw-bold text-secondary">🎯 Interest Level</small></label>
-                <select name="il" class="form-select form-select-sm mb-2">
+                <label class="form-label"><small class="fw-bold text-secondary">🎯 Interest Level</small></label>
+                <select name="il" class="form-select">
                     <option value="All">All</option>
                     {% for opt in il_options %}
                         <option value="{{ opt }}" {% if filters.get('il')==opt %}selected{% endif %}>{{ opt }}</option>
                     {% endfor %}
                 </select>
 
-                <label class="form-label mb-1"><small class="fw-bold text-secondary">📝 Minimum Word Count</small></label>
-                <input type="number" name="word" class="form-control form-control-sm mb-2" value="{{ filters.get('word', 0) }}" step="100">
+                <label class="form-label"><small class="fw-bold text-secondary">📝 Minimum Word Count</small></label>
+                <input type="number" name="word" class="form-control" value="{{ filters.get('word', 0) }}" step="100">
 
-                <input type="text" name="quiz" class="form-control form-control-sm mb-2" placeholder="🔢 AR Quiz Number" value="{{ filters.get('quiz', '') }}">
-                <input type="text" name="series" class="form-control form-control-sm mb-2" placeholder="🔗 Series" value="{{ filters.get('series', '') }}">
-                <input type="text" name="topic" class="form-control form-control-sm mb-2" placeholder="🏷️ Topic" value="{{ filters.get('topic', '') }}">
+                <label class="form-label"><small class="fw-bold text-secondary">🔢 AR Quiz Number</small></label>
+                <input type="text" name="quiz" class="form-control" placeholder="Enter quiz number..." value="{{ filters.get('quiz', '') }}">
 
-                <label class="form-label mb-1"><small class="fw-bold text-secondary">📊 ATOS Book Level Range</small></label>
+                <label class="form-label"><small class="fw-bold text-secondary">🔗 Series</small></label>
+                <input type="text" name="series" class="form-control" placeholder="Enter series name..." value="{{ filters.get('series', '') }}">
+
+                <label class="form-label"><small class="fw-bold text-secondary">🏷️ Topic</small></label>
+                <input type="text" name="topic" class="form-control" placeholder="Enter topic tag..." value="{{ filters.get('topic', '') }}">
+
+                <label class="form-label"><small class="fw-bold text-secondary">📊 ATOS Book Level Range</small></label>
                 <div class="d-flex gap-2 mb-3">
-                    <input type="number" step="0.1" name="ar_min" class="form-control form-control-sm" value="{{ filters.get('ar_min', 0.0) }}">
-                    <span class="align-self-center">-</span>
-                    <input type="number" step="0.1" name="ar_max" class="form-control form-control-sm" value="{{ filters.get('ar_max', 12.0) }}">
+                    <input type="number" step="0.1" name="ar_min" class="form-control" value="{{ filters.get('ar_min', 0.0) }}">
+                    <span class="align-self-center pb-3">-</span>
+                    <input type="number" step="0.1" name="ar_max" class="form-control" value="{{ filters.get('ar_max', 12.0) }}">
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters</button>
+                <button type="submit" class="btn btn-primary w-100 mt-2">Apply Filters</button>
             </form>
         </div>
 
@@ -379,21 +419,21 @@
                     </div>
 
                     <div class="pagination-container border-top pt-3">
-                        <a href="{{ url_for('index', page=1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da;">First</a>
-                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da;">Previous</a>
+                        <a href="{{ url_for('index', page=1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da; border-radius: 8px;">First</a>
+                        <a href="{{ url_for('index', page=page-1, **filters) }}" class="btn btn-light btn-sm {% if page == 1 %}disabled{% endif %}" style="border: 1px solid #ced4da; border-radius: 8px;">Previous</a>
                         
                         <form method="GET" action="/" class="d-inline-flex gap-1">
                             {% for key, val in filters.items() if key != 'page' %}
                                 <input type="hidden" name="{{ key }}" value="{{ val }}">
                             {% endfor %}
                             <input type="text" name="page" class="page-input" value="{{ page }}">
-                            <button type="submit" class="btn btn-light btn-sm" style="border: 1px solid #ced4da;">Go</button>
+                            <button type="submit" class="btn btn-light btn-sm" style="border: 1px solid #ced4da; border-radius: 8px;">Go</button>
                         </form>
 
                         <span class="mx-2" style="font-size: 0.9em;">Page <b>{{ page }}</b> of {{ total_pages }} &nbsp;•&nbsp; ({{ total_books }} total books)</span>
 
-                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da;">Next</a>
-                        <a href="{{ url_for('index', page=total_pages, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da;">Last</a>
+                        <a href="{{ url_for('index', page=page+1, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da; border-radius: 8px;">Next</a>
+                        <a href="{{ url_for('index', page=total_pages, **filters) }}" class="btn btn-light btn-sm {% if page == total_pages %}disabled{% endif %}" style="border: 1px solid #ced4da; border-radius: 8px;">Last</a>
                     </div>
                 </div>
 
