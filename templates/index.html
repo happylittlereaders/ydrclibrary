@@ -171,6 +171,9 @@
             align-items: center; 
             margin-bottom: 12px; 
             height: 140px; 
+            background: #fafafa;
+            border-radius: 6px;
+            overflow: hidden;
         }
 
         .cover-img { 
@@ -178,6 +181,7 @@
             max-width: 100%; 
             border-radius: 6px; 
             object-fit: contain; 
+            transition: opacity 0.3s ease;
         }
 
         /* TAG BADGES */
@@ -384,17 +388,19 @@
                     <div class="row">
                         {% for orig_idx, row in books.iterrows() %}
                         {% set title = row.iloc[idx['title']] %}
+                        {% set author = row.iloc[idx['author']] %}
                         <div class="col-md-4">
                             <div class="book-tile">
                                 <div>
                                     <div class="cover-container">
-                                        <img class="cover-img" 
-                                             src="https://covers.openlibrary.org/b/isbn/{{ row.iloc[idx['quiz']] }}-M.jpg" 
-                                             onerror="this.onerror=null; this.src='https://via.placeholder.com/100x140?text=No+Cover';" 
+                                        <img class="cover-img async-cover" 
+                                             data-title="{{ title }}" 
+                                             data-author="{{ author }}"
+                                             src="https://via.placeholder.com/100x140?text=Loading..." 
                                              alt="{{ title }}">
                                     </div>
                                     <div class="tile-title">《{{ title }}》</div>
-                                    <div style="color:#666; font-size:0.85em;" class="mb-2">{{ row.iloc[idx['author']] }}</div>
+                                    <div style="color:#666; font-size:0.85em;" class="mb-2">{{ author }}</div>
                                 </div>
                                 <div class="tag-container">
                                     <span class="tag tag-ar">ATOS {{ row.iloc[idx['ar']] }}</span>
@@ -464,6 +470,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // Chart Initialization
     const ctx = document.getElementById('levelChart');
     if (ctx) {
         new Chart(ctx, {
@@ -479,6 +486,36 @@
             options: { responsive: true, maintainAspectRatio: false }
         });
     }
+
+    // Client-Side Asynchronous Cover Image Loader
+    document.addEventListener("DOMContentLoaded", () => {
+        const coverImages = document.querySelectorAll('.async-cover');
+
+        coverImages.forEach(img => {
+            const title = img.getAttribute('data-title');
+            const author = img.getAttribute('data-author');
+
+            if (!title) {
+                img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                return;
+            }
+
+            // Fetch cover asynchronously from OpenLibrary search API
+            const query = encodeURIComponent(`${title} ${author}`);
+            fetch(`https://openlibrary.org/search.json?q=${query}&limit=1`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
+                        img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-M.jpg`;
+                    } else {
+                        img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                    }
+                })
+                .catch(() => {
+                    img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                });
+        });
+    });
 </script>
 </body>
 </html>
