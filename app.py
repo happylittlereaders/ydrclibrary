@@ -8,9 +8,11 @@ import re
 import requests
 import json
 import os
+import random
 from rapidfuzz import process, fuzz
 
 app = Flask(__name__)
+# Uses the secret key set in Render environment variables
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")
 
 # ==========================================
@@ -36,6 +38,7 @@ def safe_int(val, default=0):
 # 1. Database Connection & Helpers
 # ==========================================
 def get_db_client():
+    """Establish connection to Google Cloud Firestore using credentials JSON."""
     try:
         firestore_keys = os.environ.get("FIRESTORE_KEYS")
         if firestore_keys:
@@ -53,15 +56,19 @@ def get_db_client():
 db = get_db_client()
 
 def make_hash(password):
+    """Hash password using SHA-256."""
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
+    """Verify input password against stored hash."""
     return make_hash(password) == hashed_text
 
 def validate_email(email):
+    """Check standard email format."""
     return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email) if email else False
 
 def get_user_role(email):
+    """Determine user role: owner, admin, user, or guest."""
     if not db or not email:
         return "guest"
     if email == os.environ.get("OWNER_EMAIL", ""):
@@ -81,6 +88,7 @@ CSV_URL = "https://docs.google.com/spreadsheets/d/1wqamTRHb2vUHU_JXFq38NlYy6uQUg
 _cached_df = None
 
 def fetch_openlibrary_cover(title, author):
+    """Search OpenLibrary API for cover image."""
     try:
         query = f"{title} {author}".replace(" ", "+")
         api_url = f"https://openlibrary.org/search.json?q={query}"
@@ -94,6 +102,7 @@ def fetch_openlibrary_cover(title, author):
     return ""
 
 def load_data():
+    """Load Google Sheet dataset, clean numerical values, and pre-cache covers."""
     global _cached_df
     if _cached_df is not None:
         return _cached_df
@@ -106,15 +115,18 @@ def load_data():
             "topic": 10, "series": 11, "en": 12, "cn": 13
         }
 
+        # Format ATOS Book Level column to float
         df.iloc[:, c['ar']] = pd.to_numeric(
             df.iloc[:, c['ar']].astype(str).str.extract(r'(\d+\.?\d*)')[0],
             errors='coerce'
         ).fillna(0.0)
 
+        # Format Word Count column to integer
         word_cleaned = df.iloc[:, c['word']].astype(str).str.replace(r'[^\d.]', '', regex=True)
         df.iloc[:, c['word']] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
         df = df.fillna(" ")
 
+        # Search context block for RapidFuzz matching
         def build_search_context(row):
             return (
                 f"{row.iloc[c['title']]} {row.iloc[c['author']]} {row.iloc[c['topic']]} "
@@ -123,6 +135,7 @@ def load_data():
 
         df['_search_context'] = df.apply(build_search_context, axis=1)
 
+        # Pre-fetch cover images
         cover_urls = []
         for _, row in df.iterrows():
             cover_urls.append(fetch_openlibrary_cover(row.iloc[c['title']], row.iloc[c['author']]))
@@ -160,13 +173,14 @@ def index():
 
     f_df = df.copy()
 
-    # Apply RapidFuzz Fuzzy Match
+    # Apply RapidFuzz Fuzzy Match across search context
     if f_fuzzy:
         corpus = f_df['_search_context'].tolist()
         results = process.extract(f_fuzzy, corpus, scorer=fuzz.token_set_ratio, limit=len(corpus))
         matched_indices = [idx for text, score, idx in results if score > 35]
         f_df = f_df.iloc[matched_indices]
 
+    # Specific field filtering
     if f_title:
         f_df = f_df[f_df.iloc[:, c['title']].astype(str).str.contains(f_title, case=False)]
     if f_author:
@@ -182,14 +196,17 @@ def index():
     if f_topic:
         f_df = f_df[f_df.iloc[:, c['topic']].astype(str).str.contains(f_topic, case=False)]
 
+    # Numerical range filters
     f_df = f_df[
         (f_df.iloc[:, c['ar']] >= f_ar_min) & 
         (f_df.iloc[:, c['ar']] <= f_ar_max) & 
         (f_df.iloc[:, c['word']] >= f_word)
     ]
 
+    # Calculate level distribution for Chart.js
     level_counts = f_df.iloc[:, c['ar']].value_counts().sort_index().to_dict()
 
+    # Pagination calculation
     page = safe_int(args.get("page"), 1)
     per_page = 12
     total_books = len(f_df)
@@ -200,6 +217,7 @@ def index():
     end_idx = min(start_idx + per_page, total_books)
     page_chunk = f_df.iloc[start_idx:end_idx]
 
+    # Extract distinct interest levels for dropdown
     il_options = sorted([x for x in df.iloc[:, c['il']].unique().tolist() if str(x) != "nan" and str(x).strip() != ""])
 
     if "favorites" not in session:
@@ -222,6 +240,23 @@ def index():
         level_counts=level_counts
     )
 
+# ==========================================
+# 4. Blind Box Route
+# ==========================================
+@app.route("/blind-box")
+def blind_box():
+    """Pick a random book from the dataset and redirect to its detail page."""
+    df, _ = load_data()
+    if df.empty:
+        flash("Library data is currently unavailable.", "warning")
+        return redirect(url_for("index"))
+    
+    random_idx = random.randint(0, len(df) - 1)
+    return redirect(url_for("book_detail", book_idx=random_idx))
+
+# ==========================================
+# 5. User Favorites Route
+# ==========================================
 @app.route("/favorite/toggle", methods=["POST"])
 def toggle_favorite():
     title = request.form.get("title")
@@ -234,6 +269,9 @@ def toggle_favorite():
     session.modified = True
     return redirect(request.referrer or url_for("index"))
 
+# ==========================================
+# 6. User Auth Routes (Login, Register, Reset)
+# ==========================================
 @app.route("/login", methods=["POST"])
 def login():
     email = request.form.get("email", "").strip()
@@ -332,6 +370,9 @@ def logout():
     flash("Logged out successfully.", "info")
     return redirect(url_for("index"))
 
+# ==========================================
+# 7. Book Detail & Comment Routes
+# ==========================================
 @app.route("/book/<int:book_idx>")
 def book_detail(book_idx):
     df, c = load_data()
@@ -387,5 +428,8 @@ def add_comment():
 
     return redirect(url_for("book_detail", book_idx=book_idx))
 
+# ==========================================
+# 8. Application Entrypoint
+# ==========================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
