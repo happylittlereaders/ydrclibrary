@@ -11,13 +11,14 @@ import os
 from rapidfuzz import process, fuzz
 
 app = Flask(__name__)
-# Uses the environment variable set on Render
+# Uses the secret key set in Render environment variables
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")
 
 # ==========================================
-# 1. Database Connection
+# 1. Database Connection & Helpers
 # ==========================================
 def get_db_client():
+    """Establish connection to Google Cloud Firestore using credentials JSON."""
     try:
         firestore_keys = os.environ.get("FIRESTORE_KEYS")
         if firestore_keys:
@@ -34,20 +35,21 @@ def get_db_client():
 
 db = get_db_client()
 
-# ==========================================
-# 2. Security & Helper Functions
-# ==========================================
 def make_hash(password):
+    """Hash password using SHA-256."""
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
+    """Verify input password against stored hash."""
     return make_hash(password) == hashed_text
 
 def validate_email(email):
-    return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email)
+    """Check standard email format."""
+    return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email) if email else False
 
 def get_user_role(email):
-    if not db:
+    """Determine user role: owner, admin, user, or guest."""
+    if not db or not email:
         return "guest"
     if email == os.environ.get("OWNER_EMAIL", ""):
         return "owner"
@@ -55,21 +57,22 @@ def get_user_role(email):
         doc = db.collection("users").document(email).get()
         if doc.exists:
             return doc.to_dict().get("role", "user")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error fetching role: {e}")
     return "guest"
 
 # ==========================================
-# 3. Data Processing & Lazy Loading
+# 2. Data Loading & Cover Art Service
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/1wqamTRHb2vUHU_JXFq38NlYy6uQUguEHbuv0XQfdW5M/export?format=csv&gid=897583843"
 _cached_df = None
 
 def fetch_openlibrary_cover(title, author):
+    """Search OpenLibrary API for cover image."""
     try:
         query = f"{title} {author}".replace(" ", "+")
         api_url = f"https://openlibrary.org/search.json?q={query}"
-        res = requests.get(api_url, timeout=3).json()
+        res = requests.get(api_url, timeout=2).json()
         if res.get("docs"):
             for doc in res["docs"]:
                 if "cover_i" in doc:
@@ -79,6 +82,7 @@ def fetch_openlibrary_cover(title, author):
     return ""
 
 def load_data():
+    """Load Google Sheet dataset, clean numerical values, and pre-cache covers."""
     global _cached_df
     if _cached_df is not None:
         return _cached_df
@@ -91,17 +95,18 @@ def load_data():
             "topic": 10, "series": 11, "en": 12, "cn": 13
         }
 
-        # Format numeric columns
+        # Format ATOS Book Level column to float
         df.iloc[:, c['ar']] = pd.to_numeric(
             df.iloc[:, c['ar']].astype(str).str.extract(r'(\d+\.?\d*)')[0],
             errors='coerce'
         ).fillna(0.0)
 
+        # Format Word Count column to integer
         word_cleaned = df.iloc[:, c['word']].astype(str).str.replace(r'[^\d.]', '', regex=True)
         df.iloc[:, c['word']] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
         df = df.fillna(" ")
 
-        # Context block for RapidFuzz lookup
+        # Search context block for RapidFuzz matching
         def build_search_context(row):
             return (
                 f"{row.iloc[c['title']]} {row.iloc[c['author']]} {row.iloc[c['topic']]} "
@@ -110,7 +115,7 @@ def load_data():
 
         df['_search_context'] = df.apply(build_search_context, axis=1)
 
-        # Batch load artwork covers
+        # Pre-fetch cover images
         cover_urls = []
         for _, row in df.iterrows():
             cover_urls.append(fetch_openlibrary_cover(row.iloc[c['title']], row.iloc[c['author']]))
@@ -123,15 +128,15 @@ def load_data():
         return pd.DataFrame(), {}
 
 # ==========================================
-# 4. Web Routes
+# 3. Main Dashboard & Search Routes
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
     df, c = load_data()
     if df.empty:
-        return "Database unavailable.", 500
+        return "Database or dataset currently unavailable.", 500
 
-    # Retrieve request parameters for search/filtering
+    # Retrieve all search and filter form fields
     f_fuzzy = request.args.get("fuzzy", "").strip()
     f_title = request.args.get("title", "").strip()
     f_author = request.args.get("author", "").strip()
@@ -146,13 +151,14 @@ def index():
 
     f_df = df.copy()
 
-    # Apply RapidFuzz Fuzzy Match
+    # Apply RapidFuzz Fuzzy Match across search context
     if f_fuzzy:
         corpus = f_df['_search_context'].tolist()
         results = process.extract(f_fuzzy, corpus, scorer=fuzz.token_set_ratio, limit=len(corpus))
         matched_indices = [idx for text, score, idx in results if score > 35]
         f_df = f_df.iloc[matched_indices]
 
+    # Specific field filtering
     if f_title:
         f_df = f_df[f_df.iloc[:, c['title']].astype(str).str.contains(f_title, case=False)]
     if f_author:
@@ -168,13 +174,17 @@ def index():
     if f_topic:
         f_df = f_df[f_df.iloc[:, c['topic']].astype(str).str.contains(f_topic, case=False)]
 
+    # Numerical range filters
     f_df = f_df[
         (f_df.iloc[:, c['ar']] >= f_ar_min) & 
         (f_df.iloc[:, c['ar']] <= f_ar_max) & 
         (f_df.iloc[:, c['word']] >= f_word)
     ]
 
-    # Pagination setup
+    # Calculate level distribution for Chart.js
+    level_counts = f_df.iloc[:, c['ar']].value_counts().sort_index().to_dict()
+
+    # Pagination calculation
     page = int(request.args.get("page", 1))
     per_page = 12
     total_books = len(f_df)
@@ -185,7 +195,11 @@ def index():
     end_idx = min(start_idx + per_page, total_books)
     page_chunk = f_df.iloc[start_idx:end_idx]
 
-    il_options = sorted([x for x in df.iloc[:, c['il']].unique().tolist() if str(x) != "nan"])
+    # Extract distinct interest levels for dropdown
+    il_options = sorted([x for x in df.iloc[:, c['il']].unique().tolist() if str(x) != "nan" and str(x).strip() != ""])
+
+    if "favorites" not in session:
+        session["favorites"] = []
 
     return render_template(
         "index.html",
@@ -196,9 +210,130 @@ def index():
         total_books=total_books,
         il_options=il_options,
         filters=request.args,
-        user=session.get("user")
+        user=session.get("user"),
+        favorites=session.get("favorites", []),
+        level_counts=level_counts
     )
 
+# ==========================================
+# 4. User Favorites Route
+# ==========================================
+@app.route("/favorite/toggle", methods=["POST"])
+def toggle_favorite():
+    title = request.form.get("title")
+    favs = session.get("favorites", [])
+    if title in favs:
+        favs.remove(title)
+    else:
+        favs.append(title)
+    session["favorites"] = favs
+    session.modified = True
+    return redirect(request.referrer or url_for("index"))
+
+# ==========================================
+# 5. User Auth Routes (Login, Register, Reset)
+# ==========================================
+@app.route("/login", methods=["POST"])
+def login():
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+
+    if not db:
+        flash("Database service unavailable.", "danger")
+        return redirect(url_for("index"))
+
+    try:
+        doc = db.collection("users").document(email).get()
+        if doc.exists:
+            user_data = doc.to_dict()
+            if check_hashes(password, user_data.get("password", "")):
+                session["user"] = {
+                    "email": email,
+                    "nickname": user_data.get("nickname", "User"),
+                    "role": get_user_role(email)
+                }
+                flash("Logged in successfully!", "success")
+            else:
+                flash("Incorrect password.", "danger")
+        else:
+            flash("User account not found.", "danger")
+    except Exception as e:
+        flash(f"Login error: {e}", "danger")
+
+    return redirect(url_for("index"))
+
+@app.route("/register", methods=["POST"])
+def register():
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+    nickname = request.form.get("nickname", "").strip()
+
+    if not validate_email(email):
+        flash("Please enter a valid email address.", "danger")
+        return redirect(url_for("index"))
+
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "warning")
+        return redirect(url_for("index"))
+
+    if db:
+        try:
+            doc_ref = db.collection("users").document(email)
+            if doc_ref.get().exists:
+                flash("An account with this email already exists.", "warning")
+            else:
+                role = "owner" if email == os.environ.get("OWNER_EMAIL", "") else "user"
+                doc_ref.set({
+                    "email": email,
+                    "password": make_hash(password),
+                    "nickname": nickname,
+                    "role": role,
+                    "created_at": firestore.SERVER_TIMESTAMP
+                })
+                flash("Account registered successfully! You can now log in.", "success")
+        except Exception as e:
+            flash(f"Registration error: {e}", "danger")
+
+    return redirect(url_for("index"))
+
+@app.route("/reset-password", methods=["POST"])
+def reset_password():
+    email = request.form.get("email", "").strip()
+    project_id = request.form.get("project_id", "").strip()
+    new_password = request.form.get("new_password", "")
+
+    env_proj_id = os.environ.get("PROJECT_ID", "").strip()
+
+    if not env_proj_id or project_id != env_proj_id:
+        flash("Invalid Project ID verification.", "danger")
+        return redirect(url_for("index"))
+
+    if len(new_password) < 6:
+        flash("New password must be at least 6 characters.", "warning")
+        return redirect(url_for("index"))
+
+    if db:
+        try:
+            doc_ref = db.collection("users").document(email)
+            if doc_ref.get().exists:
+                doc_ref.update({"password": make_hash(new_password)})
+                flash("Password reset successfully! Please log in with your new password.", "success")
+            else:
+                flash("Account email not found.", "danger")
+        except Exception as e:
+            flash(f"Reset error: {e}", "danger")
+
+    return redirect(url_for("index"))
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    flash("Logged out successfully.", "info")
+    return redirect(url_for("index"))
+
+# ==========================================
+# 6. Book Detail & Comment Routes
+# ==========================================
 @app.route("/book/<int:book_idx>")
 def book_detail(book_idx):
     df, c = load_data()
@@ -208,7 +343,6 @@ def book_detail(book_idx):
     row = df.iloc[book_idx]
     title = str(row.iloc[c['title']])
 
-    # Load book comments from Firestore
     comments = []
     if db:
         try:
@@ -228,84 +362,35 @@ def book_detail(book_idx):
         user=session.get("user")
     )
 
-@app.route("/login", methods=["POST"])
-def login():
-    email = request.form.get("email")
-    password = request.form.get("password")
-
-    if not db:
-        flash("Database unavailable.", "danger")
-        return redirect(url_for("index"))
-
-    doc = db.collection("users").document(email).get()
-    if doc.exists:
-        user_data = doc.to_dict()
-        if check_hashes(password, user_data.get("password", "")):
-            session["user"] = {
-                "email": email,
-                "nickname": user_data.get("nickname", "User"),
-                "role": get_user_role(email)
-            }
-            flash("Welcome back!", "success")
-        else:
-            flash("Incorrect password.", "danger")
-    else:
-        flash("User profile not found.", "danger")
-
-    return redirect(url_for("index"))
-
-@app.route("/logout")
-def logout():
-    session.pop("user", None)
-    return redirect(url_for("index"))
-
-@app.route("/register", methods=["POST"])
-def register():
-    email = request.form.get("email")
-    password = request.form.get("password")
-    nickname = request.form.get("nickname")
-
-    if not validate_email(email) or len(password) < 6:
-        flash("Registration invalid.", "danger")
-        return redirect(url_for("index"))
-
-    if db:
-        doc_ref = db.collection("users").document(email)
-        if doc_ref.get().exists:
-            flash("Account already exists.", "warning")
-        else:
-            role = "owner" if email == os.environ.get("OWNER_EMAIL", "") else "user"
-            doc_ref.set({
-                "email": email,
-                "password": make_hash(password),
-                "nickname": nickname,
-                "role": role,
-                "created_at": firestore.SERVER_TIMESTAMP
-            })
-            flash("Account registered successfully!", "success")
-            
-    return redirect(url_for("index"))
-
 @app.route("/comment/add", methods=["POST"])
 def add_comment():
     user = session.get("user")
     if not user:
-        return "Unauthorized", 401
+        flash("You must be logged in to post comments.", "warning")
+        return redirect(url_for("index"))
 
     book_title = request.form.get("book_title")
-    text = request.form.get("text")
+    text = request.form.get("text", "").strip()
     book_idx = request.form.get("book_idx")
 
-    if db and text.strip():
-        db.collection("comments").add({
-            "book": book_title,
-            "text": text,
-            "author_email": user["email"],
-            "author_nick": user["nickname"],
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "timestamp": firestore.SERVER_TIMESTAMP
-        })
+    if db and text:
+        try:
+            db.collection("comments").add({
+                "book": book_title,
+                "text": text,
+                "author_email": user["email"],
+                "author_nick": user["nickname"],
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "timestamp": firestore.SERVER_TIMESTAMP
+            })
+            flash("Comment posted successfully!", "success")
+        except Exception as e:
+            flash(f"Error posting comment: {e}", "danger")
+
     return redirect(url_for("book_detail", book_idx=book_idx))
 
+# ==========================================
+# 7. Application Entrypoint
+# ==========================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
