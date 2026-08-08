@@ -127,17 +127,11 @@ def load_data():
         return pd.DataFrame(), {}
 
 # ==========================================
-# 3. Main Dashboard & Search Routes
+# 3. Shared Filtering Logic
 # ==========================================
-@app.route("/", methods=["GET"])
-def index():
-    df, c = load_data()
-    if df.empty:
-        return "Database or dataset currently unavailable.", 500
-
-    # Clean URL query parameters
-    args = request.args.to_dict()
-
+def apply_filters(df, c, args):
+    """Apply all sidebar filters/search to a dataframe. Shared by index() and blind_box()
+    so the mystery box always respects whatever filters are currently active."""
     f_fuzzy = args.get("fuzzy", "").strip()
     f_title = args.get("title", "").strip()
     f_author = args.get("author", "").strip()
@@ -177,10 +171,26 @@ def index():
 
     # Numerical range filters
     f_df = f_df[
-        (f_df.iloc[:, c['ar']] >= f_ar_min) & 
-        (f_df.iloc[:, c['ar']] <= f_ar_max) & 
+        (f_df.iloc[:, c['ar']] >= f_ar_min) &
+        (f_df.iloc[:, c['ar']] <= f_ar_max) &
         (f_df.iloc[:, c['word']] >= f_word)
     ]
+
+    return f_df
+
+# ==========================================
+# 4. Main Dashboard & Search Routes
+# ==========================================
+@app.route("/", methods=["GET"])
+def index():
+    df, c = load_data()
+    if df.empty:
+        return "Database or dataset currently unavailable.", 500
+
+    # Clean URL query parameters
+    args = request.args.to_dict()
+
+    f_df = apply_filters(df, c, args)
 
     # Calculate level distribution for Chart.js
     level_counts = f_df.iloc[:, c['ar']].value_counts().sort_index().to_dict()
@@ -220,21 +230,32 @@ def index():
     )
 
 # ==========================================
-# 4. Blind Box Route
+# 5. Blind Box Route
 # ==========================================
 @app.route("/blind-box")
 def blind_box():
-    """Pick a random book from the dataset and redirect to its detail page."""
-    df, _ = load_data()
+    """Pick a random book from the CURRENTLY FILTERED dataset and redirect to its detail page."""
+    df, c = load_data()
     if df.empty:
         flash("Library data is currently unavailable.", "warning")
         return redirect(url_for("index"))
-    
-    random_idx = random.randint(0, len(df) - 1)
+
+    args = request.args.to_dict()
+    f_df = apply_filters(df, c, args)
+
+    filters_clean = {k: v for k, v in args.items() if v != ''}
+
+    if f_df.empty:
+        flash("No books match your current filters for the mystery box. Try loosening your filters.", "warning")
+        return redirect(url_for("index", **filters_clean))
+
+    # f_df retains original row indices from the full dataframe, so this stays
+    # consistent with the book_idx used by book_detail()
+    random_idx = random.choice(f_df.index.tolist())
     return redirect(url_for("book_detail", book_idx=random_idx))
 
 # ==========================================
-# 5. User Favorites Route
+# 6. User Favorites Route
 # ==========================================
 @app.route("/favorite/toggle", methods=["POST"])
 def toggle_favorite():
@@ -249,7 +270,7 @@ def toggle_favorite():
     return redirect(request.referrer or url_for("index"))
 
 # ==========================================
-# 6. User Auth Routes (Login, Register, Reset)
+# 7. User Auth Routes (Login, Register, Reset)
 # ==========================================
 @app.route("/login", methods=["POST"])
 def login():
@@ -350,7 +371,7 @@ def logout():
     return redirect(url_for("index"))
 
 # ==========================================
-# 7. Book Detail & Comment Routes
+# 8. Book Detail & Comment Routes
 # ==========================================
 @app.route("/book/<int:book_idx>")
 def book_detail(book_idx):
@@ -408,7 +429,7 @@ def add_comment():
     return redirect(url_for("book_detail", book_idx=book_idx))
 
 # ==========================================
-# 8. Application Entrypoint
+# 9. Application Entrypoint
 # ==========================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
