@@ -10,6 +10,8 @@
         .comment-box { background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #eee; border-left: 5px solid #1e3d59; }
         .comment-meta { color: #888; font-size: 0.8em; margin-bottom: 5px; display: flex; justify-content: space-between; }
         .recommendation-box { background: #fffcf5; padding: 25px; border-radius: 15px; border: 2px dashed #ff6e40; margin-top: 15px; }
+        .cover-container { display: flex; justify-content: center; align-items: center; height: 220px; background: #fafafa; border-radius: 6px; overflow: hidden; }
+        .cover-img { max-height: 220px; max-width: 100%; border-radius: 6px; object-fit: contain; transition: opacity 0.3s ease; }
     </style>
 </head>
 <body>
@@ -20,14 +22,14 @@
 
     <div class="row mt-4">
         <div class="col-md-3">
-            {% if row['_cover_url'] %}
-                <img src="{{ row['_cover_url'] }}" class="img-fluid rounded shadow" alt="Book Cover">
-            {% else %}
-                <div class="p-5 bg-light text-center border rounded text-muted">
-                    <div style="font-size: 2rem;">📚</div>
-                    <div>No Cover Available</div>
-                </div>
-            {% endif %}
+            <div class="cover-container">
+                <img id="detail-cover"
+                     class="cover-img async-cover"
+                     data-title="{{ row.iloc[idx['title']] }}"
+                     data-author="{{ row.iloc[idx['author']] }}"
+                     src="https://via.placeholder.com/160x220?text=Loading..."
+                     alt="Book Cover">
+            </div>
         </div>
 
         <div class="col-md-9">
@@ -92,6 +94,34 @@
         document.getElementById('rec-cn').style.display = (lang === 'CN') ? 'block' : 'none';
         document.getElementById('rec-en').style.display = (lang === 'EN') ? 'block' : 'none';
     }
+
+    // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page)
+    document.addEventListener("DOMContentLoaded", () => {
+        const img = document.getElementById('detail-cover');
+        if (!img) return;
+
+        const title = img.getAttribute('data-title');
+        const author = img.getAttribute('data-author');
+
+        if (!title) {
+            img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+            return;
+        }
+
+        const query = encodeURIComponent(`${title} ${author}`);
+        fetch(`https://openlibrary.org/search.json?q=${query}&limit=1`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
+                    img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-L.jpg`;
+                } else {
+                    img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+                }
+            })
+            .catch(() => {
+                img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+            });
+    });
 </script>
 </body>
 </html>
