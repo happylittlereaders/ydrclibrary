@@ -7,7 +7,10 @@ import hashlib
 import re
 import json
 import os
+import io
 import random
+import traceback
+import requests
 from rapidfuzz import process, fuzz
 
 app = Flask(__name__)
@@ -93,22 +96,47 @@ def load_data():
         return _cached_df
 
     try:
-        df = pd.read_csv(CSV_URL)
+        # Fetch manually with a browser-like User-Agent — Google Sheets export links
+        # sometimes reject/redirect bare urllib requests (which is what pd.read_csv
+        # uses internally) when they come from a datacenter IP like Render's.
+        resp = requests.get(CSV_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        resp.raise_for_status()
+
+        # If Google didn't give us CSV (e.g. an HTML sign-in/interstitial page
+        # because of a sharing-permission issue), fail loudly instead of silently.
+        content_type = resp.headers.get("Content-Type", "")
+        if "csv" not in content_type and resp.text.lstrip().startswith("<"):
+            raise ValueError(
+                f"Expected CSV but got content-type={content_type!r}; "
+                f"first 200 chars: {resp.text[:200]!r}"
+            )
+
+        df = pd.read_csv(io.StringIO(resp.text))
+
         c = {
             "il": 1, "rec": 2, "title": 3, "author": 5,
             "quiz": 6, "ar": 7, "word": 8, "fnf": 9,
             "topic": 10, "series": 11, "en": 12, "cn": 13
         }
 
-        # Format ATOS Book Level column to float
-        df.iloc[:, c['ar']] = pd.to_numeric(
-            df.iloc[:, c['ar']].astype(str).str.extract(r'(\d+\.?\d*)')[0],
+        # Resolve positional indices to actual column names once, up front.
+        # (Everywhere else in the app still reads via `c` + iloc, which is fine —
+        # this only affects the in-place *writes* below.)
+        ar_col = df.columns[c['ar']]
+        word_col = df.columns[c['word']]
+
+        # Format ATOS Book Level column to float — assign by column name, not
+        # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
+        # silently upcasting a column's dtype through positional iloc-assignment.
+        df[ar_col] = pd.to_numeric(
+            df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
             errors='coerce'
         ).fillna(0.0)
 
-        # Format Word Count column to integer
-        word_cleaned = df.iloc[:, c['word']].astype(str).str.replace(r'[^\d.]', '', regex=True)
-        df.iloc[:, c['word']] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
+        # Format Word Count column to integer — same fix
+        word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+        df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
+
         df = df.fillna(" ")
 
         # Search context block for RapidFuzz matching
@@ -123,7 +151,9 @@ def load_data():
         _cached_df = (df, c)
         return _cached_df
     except Exception as e:
-        print(f"Data loading failed: {e}")
+        # Print full traceback (not just str(e)) so Render logs show the real cause
+        print(f"❌ Data loading failed: {e}")
+        traceback.print_exc()
         return pd.DataFrame(), {}
 
 # ==========================================
