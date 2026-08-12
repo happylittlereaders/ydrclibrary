@@ -12,6 +12,7 @@
         .recommendation-box { background: #fffcf5; padding: 25px; border-radius: 15px; border: 2px dashed #ff6e40; margin-top: 15px; }
         .cover-container { display: flex; justify-content: center; align-items: center; height: 220px; background: #fafafa; border-radius: 6px; overflow: hidden; }
         .cover-img { max-height: 220px; max-width: 100%; border-radius: 6px; object-fit: contain; transition: opacity 0.3s ease; }
+        .rec-tab-btn { margin-bottom: 6px; }
     </style>
 </head>
 <body>
@@ -49,12 +50,31 @@
 
     <div class="mt-4">
         <h4>🌟 Recommendation Details</h4>
-        <div class="btn-group mb-2" role="group">
-            <button type="button" class="btn btn-outline-danger" onclick="toggleLang('CN')">CN 中文理由</button>
-            <button type="button" class="btn btn-outline-primary" onclick="toggleLang('EN')">US English</button>
+        <div class="btn-group mb-2 flex-wrap" role="group">
+            {% for rec in recommendations %}
+                <button type="button"
+                        class="btn btn-outline-primary rec-tab-btn{% if loop.first %} active{% endif %}"
+                        onclick="toggleRec('en-{{ rec.num }}', this)">
+                    {% if recommendations|length > 1 %}EN {{ rec.num }}{% else %}US English{% endif %}
+                </button>
+                <button type="button"
+                        class="btn btn-outline-danger rec-tab-btn"
+                        onclick="toggleRec('cn-{{ rec.num }}', this)">
+                    {% if recommendations|length > 1 %}CN {{ rec.num }}{% else %}CN 中文理由{% endif %}
+                </button>
+            {% endfor %}
         </div>
-        <div id="rec-cn" class="recommendation-box" style="display: none;">{{ row.iloc[idx['cn']] }}</div>
-        <div id="rec-en" class="recommendation-box">{{ row.iloc[idx['en']] }}</div>
+
+        {% for rec in recommendations %}
+            <div id="rec-en-{{ rec.num }}" class="recommendation-box rec-panel" {% if not loop.first %}style="display: none;"{% endif %}>
+                {% if recommendations|length > 1 %}<div class="mb-2 text-muted" style="font-size:0.85em;">🙋 Recommended by {{ rec.recommender }}</div>{% endif %}
+                {{ rec.en }}
+            </div>
+            <div id="rec-cn-{{ rec.num }}" class="recommendation-box rec-panel" style="display: none;">
+                {% if recommendations|length > 1 %}<div class="mb-2 text-muted" style="font-size:0.85em;">🙋 Recommended by {{ rec.recommender }}</div>{% endif %}
+                {{ rec.cn }}
+            </div>
+        {% endfor %}
     </div>
 
     <hr class="my-4">
@@ -90,9 +110,13 @@
 </div>
 
 <script>
-    function toggleLang(lang) {
-        document.getElementById('rec-cn').style.display = (lang === 'CN') ? 'block' : 'none';
-        document.getElementById('rec-en').style.display = (lang === 'EN') ? 'block' : 'none';
+    function toggleRec(id, btn) {
+        document.querySelectorAll('.rec-panel').forEach(el => el.style.display = 'none');
+        const target = document.getElementById('rec-' + id);
+        if (target) target.style.display = 'block';
+
+        document.querySelectorAll('.rec-tab-btn').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
     }
 
     // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page)
