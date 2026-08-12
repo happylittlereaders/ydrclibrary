@@ -411,6 +411,38 @@ def book_detail(book_idx):
 
     row = df.iloc[book_idx]
     title = str(row.iloc[c['title']])
+    author = str(row.iloc[c['author']])
+
+    # ------------------------------------------------------------------
+    # Find every row in the full dataset that represents the SAME book
+    # (matched on title + author) so that duplicate entries — e.g. the
+    # same book recommended by multiple people — surface as multiple
+    # numbered EN/CN recommendation tabs instead of only showing
+    # whichever single row happened to be clicked.
+    # ------------------------------------------------------------------
+    title_col = df.iloc[:, c['title']].astype(str).str.strip()
+    author_col = df.iloc[:, c['author']].astype(str).str.strip()
+    dup_mask = (title_col == title.strip()) & (author_col == author.strip())
+    dup_rows = df[dup_mask]
+
+    recommendations = []
+    for i, (_, drow) in enumerate(dup_rows.iterrows(), start=1):
+        recommendations.append({
+            "num": i,
+            "en": drow.iloc[c['en']],
+            "cn": drow.iloc[c['cn']],
+            "recommender": drow.iloc[c['rec']],
+        })
+
+    # Fallback: should never trigger since `row` itself always matches
+    # its own title/author, but guards against an empty list either way.
+    if not recommendations:
+        recommendations = [{
+            "num": 1,
+            "en": row.iloc[c['en']],
+            "cn": row.iloc[c['cn']],
+            "recommender": row.iloc[c['rec']],
+        }]
 
     comments = []
     if db:
@@ -428,6 +460,7 @@ def book_detail(book_idx):
         idx=c,
         book_idx=book_idx,
         comments=comments,
+        recommendations=recommendations,
         user=session.get("user")
     )
 
