@@ -139,11 +139,17 @@ def load_data():
 
         df = df.fillna(" ")
 
-        # Search context block for RapidFuzz matching
+        # Search context block for RapidFuzz matching — metadata only.
+        # Deliberately excludes the long EN/CN recommendation essays: mixing
+        # short queries against huge free-text blobs dilutes typo-tolerant
+        # scoring (token_set_ratio can't find a fuzzy match once a typo'd
+        # word fails to land in the exact-token intersection, and the score
+        # then gets swamped by comparison against a whole paragraph), and
+        # it's needlessly expensive to fuzzy-score paragraphs on every request.
         def build_search_context(row):
             return (
                 f"{row.iloc[c['title']]} {row.iloc[c['author']]} {row.iloc[c['topic']]} "
-                f"{row.iloc[c['fnf']]} {row.iloc[c['series']]} {row.iloc[c['en']]} {row.iloc[c['cn']]}"
+                f"{row.iloc[c['fnf']]} {row.iloc[c['series']]}"
             )
 
         df['_search_context'] = df.apply(build_search_context, axis=1)
@@ -176,11 +182,22 @@ def apply_filters(df, c, args):
 
     f_df = df.copy()
 
-    # Apply RapidFuzz Fuzzy Match across search context
+    # Apply RapidFuzz Fuzzy Match across search context.
+    # WRatio blends several RapidFuzz scorers (ratio, partial ratio, token
+    # sort/set) and takes the best signal, so it tolerates a dropped/swapped
+    # letter much better than a single token_set_ratio call would. score_cutoff
+    # lets RapidFuzz bail out early on low scorers instead of fully scoring
+    # every row — cheaper on low-memory hosts.
     if f_fuzzy:
         corpus = f_df['_search_context'].tolist()
-        results = process.extract(f_fuzzy, corpus, scorer=fuzz.token_set_ratio, limit=len(corpus))
-        matched_indices = [idx for text, score, idx in results if score > 35]
+        results = process.extract(
+            f_fuzzy,
+            corpus,
+            scorer=fuzz.WRatio,
+            limit=len(corpus),
+            score_cutoff=60,
+        )
+        matched_indices = [idx for text, score, idx in results]
         f_df = f_df.iloc[matched_indices]
 
     # Specific field filtering
