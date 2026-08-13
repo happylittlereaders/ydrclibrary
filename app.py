@@ -128,31 +128,21 @@ def load_data():
         # Format ATOS Book Level column to float — assign by column name, not
         # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
         # silently upcasting a column's dtype through positional iloc-assignment.
+        # .round(1) matters here: binary floats can't represent decimals like
+        # 5.7 exactly, so two rows that both "mean" 5.7 can land as slightly
+        # different floats (5.7 vs 5.699999999999999) and get treated as
+        # separate buckets by value_counts() later — showing up as a stray
+        # near-invisible sliver bar next to the real one on the chart.
         df[ar_col] = pd.to_numeric(
             df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
             errors='coerce'
-        ).fillna(0.0)
+        ).fillna(0.0).round(1)
 
         # Format Word Count column to integer — same fix
         word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
         df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
 
         df = df.fillna(" ")
-
-        # Search context block for RapidFuzz matching — metadata only.
-        # Deliberately excludes the long EN/CN recommendation essays: mixing
-        # short queries against huge free-text blobs dilutes typo-tolerant
-        # scoring (token_set_ratio can't find a fuzzy match once a typo'd
-        # word fails to land in the exact-token intersection, and the score
-        # then gets swamped by comparison against a whole paragraph), and
-        # it's needlessly expensive to fuzzy-score paragraphs on every request.
-        def build_search_context(row):
-            return (
-                f"{row.iloc[c['title']]} {row.iloc[c['author']]} {row.iloc[c['topic']]} "
-                f"{row.iloc[c['fnf']]} {row.iloc[c['series']]}"
-            )
-
-        df['_search_context'] = df.apply(build_search_context, axis=1)
 
         _cached_df = (df, c)
         return _cached_df
@@ -163,7 +153,69 @@ def load_data():
         return pd.DataFrame(), {}
 
 # ==========================================
-# 3. Shared Filtering Logic
+# 3. Fuzzy Search Ranking
+# ==========================================
+def fuzzy_rank(f_df, c, query, cutoff=65):
+    """Rank & filter rows by how well `query` matches their metadata fields
+    (title, author, series, topic), typo-tolerant.
+
+    Two-pass per field:
+      1. Exact substring match -> instant top score (100). This guarantees
+         a query like "sound" always surfaces "The Sound of Waves" and
+         puts it first, rather than leaving it to fuzzy-score luck.
+      2. token_sort_ratio as a typo-tolerant fallback, run against the
+         WHOLE field value (not a giant concatenated blob of every field).
+         token_sort_ratio compares full strings after sorting their words,
+         so it's forgiving of typos and word reordering, but — unlike
+         WRatio's partial_ratio component — it won't hand out high scores
+         just because a short common word like "the"/"of" happens to
+         appear somewhere in a long row. That's what made the old search
+         return "every book with a word similar to 'the'".
+
+    Each row's score is the max across fields. Results are actually sorted
+    by score (descending) instead of left in arbitrary original-row order,
+    so the best matches land on page 1 instead of possibly page 3.
+    """
+    query_stripped = query.strip()
+    if not query_stripped:
+        return f_df
+
+    query_lower = query_stripped.lower()
+    fields = [c['title'], c['author'], c['series'], c['topic']]
+
+    n = len(f_df)
+    scores = [0.0] * n
+
+    for col_idx in fields:
+        values = f_df.iloc[:, col_idx].astype(str).tolist()
+
+        # Pass 1: exact substring match, instant max score.
+        for i, val in enumerate(values):
+            if query_lower in val.lower():
+                scores[i] = 100.0
+
+        # Pass 2: typo-tolerant fallback for everything else.
+        results = process.extract(
+            query_stripped, values, scorer=fuzz.token_sort_ratio, limit=n
+        )
+        for _, score, idx in results:
+            if score > scores[idx]:
+                scores[idx] = score
+
+    ranked = sorted(
+        ((score, pos) for pos, score in enumerate(scores) if score >= cutoff),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+
+    if not ranked:
+        return f_df.iloc[0:0]
+
+    order = [pos for _, pos in ranked]
+    return f_df.iloc[order]
+
+# ==========================================
+# 4. Shared Filtering Logic
 # ==========================================
 def apply_filters(df, c, args):
     """Apply all sidebar filters/search to a dataframe. Shared by index() and blind_box()
@@ -182,23 +234,9 @@ def apply_filters(df, c, args):
 
     f_df = df.copy()
 
-    # Apply RapidFuzz Fuzzy Match across search context.
-    # WRatio blends several RapidFuzz scorers (ratio, partial ratio, token
-    # sort/set) and takes the best signal, so it tolerates a dropped/swapped
-    # letter much better than a single token_set_ratio call would. score_cutoff
-    # lets RapidFuzz bail out early on low scorers instead of fully scoring
-    # every row — cheaper on low-memory hosts.
+    # Rank & filter by fuzzy match — see fuzzy_rank() above.
     if f_fuzzy:
-        corpus = f_df['_search_context'].tolist()
-        results = process.extract(
-            f_fuzzy,
-            corpus,
-            scorer=fuzz.WRatio,
-            limit=len(corpus),
-            score_cutoff=60,
-        )
-        matched_indices = [idx for text, score, idx in results]
-        f_df = f_df.iloc[matched_indices]
+        f_df = fuzzy_rank(f_df, c, f_fuzzy)
 
     # Specific field filtering
     if f_title:
@@ -226,7 +264,7 @@ def apply_filters(df, c, args):
     return f_df
 
 # ==========================================
-# 4. Main Dashboard & Search Routes
+# 5. Main Dashboard & Search Routes
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -239,8 +277,12 @@ def index():
 
     f_df = apply_filters(df, c, args)
 
-    # Calculate level distribution for Chart.js
-    level_counts = f_df.iloc[:, c['ar']].value_counts().sort_index().to_dict()
+    # Calculate level distribution for Chart.js.
+    # Excludes 0 — that's the placeholder for books with no ATOS level in the
+    # sheet (filled in during cleaning), not a real reading level, so it
+    # shouldn't get its own bar.
+    ar_series = f_df.iloc[:, c['ar']]
+    level_counts = ar_series[ar_series > 0].value_counts().sort_index().to_dict()
 
     # Pagination calculation
     page = safe_int(args.get("page"), 1)
@@ -277,7 +319,7 @@ def index():
     )
 
 # ==========================================
-# 5. Blind Box Route
+# 6. Blind Box Route
 # ==========================================
 @app.route("/blind-box")
 def blind_box():
@@ -302,7 +344,7 @@ def blind_box():
     return redirect(url_for("book_detail", book_idx=random_idx))
 
 # ==========================================
-# 6. User Favorites Route
+# 7. User Favorites Route
 # ==========================================
 @app.route("/favorite/toggle", methods=["POST"])
 def toggle_favorite():
@@ -317,7 +359,7 @@ def toggle_favorite():
     return redirect(request.referrer or url_for("index"))
 
 # ==========================================
-# 7. User Auth Routes (Login, Register, Reset)
+# 8. User Auth Routes (Login, Register, Reset)
 # ==========================================
 @app.route("/login", methods=["POST"])
 def login():
@@ -418,7 +460,7 @@ def logout():
     return redirect(url_for("index"))
 
 # ==========================================
-# 8. Book Detail & Comment Routes
+# 9. Book Detail & Comment Routes
 # ==========================================
 @app.route("/book/<int:book_idx>")
 def book_detail(book_idx):
@@ -509,7 +551,7 @@ def add_comment():
     return redirect(url_for("book_detail", book_idx=book_idx))
 
 # ==========================================
-# 9. Application Entrypoint
+# 10. Application Entrypoint
 # ==========================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
