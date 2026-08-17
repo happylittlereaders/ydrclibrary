@@ -249,6 +249,20 @@
             border: 1px solid #ced4da; 
             padding: 6px; 
         }
+
+        /* LEGAL MODAL */
+        #legalModal .modal-body {
+            max-height: 65vh;
+            overflow-y: auto;
+        }
+        #legalModal h6 {
+            color: #1e3d59;
+            font-weight: 700;
+            margin-top: 18px;
+        }
+        #legalModal .modal-footer {
+            border-top: 2px solid #e2d1b0;
+        }
     </style>
 </head>
 <body>
@@ -280,16 +294,22 @@
                     <div class="tab-pane fade show active" id="login-panel">
                         <form action="{{ url_for('login') }}" method="POST">
                             <input type="email" name="email" class="form-control" placeholder="Email" required>
-                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                            <div class="input-group mb-3">
+                                <input type="password" id="loginPassword" name="password" class="form-control" placeholder="Password" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('loginPassword', this)" aria-label="Show password">👁</button>
+                            </div>
                             <button type="submit" class="btn btn-primary w-100 mt-1">🚀 Log In</button>
                         </form>
                     </div>
 
                     <div class="tab-pane fade" id="register-panel">
-                        <form action="{{ url_for('register') }}" method="POST">
+                        <form action="{{ url_for('register') }}" method="POST" id="registerForm">
                             <input type="email" name="email" class="form-control" placeholder="Email (Account ID)" required>
                             <input type="text" name="nickname" class="form-control" placeholder="Nickname (Display Name)" required>
-                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                            <div class="input-group mb-3">
+                                <input type="password" id="registerPassword" name="password" class="form-control" placeholder="Password" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('registerPassword', this)" aria-label="Show password">👁</button>
+                            </div>
                             <button type="submit" class="btn btn-success w-100 mt-1">✨ Create Account</button>
                         </form>
                     </div>
@@ -305,7 +325,10 @@
                             <form action="{{ url_for('reset_password') }}" method="POST">
                                 <input type="email" name="email" class="form-control" placeholder="Account Email" required>
                                 <input type="text" name="project_id" class="form-control" placeholder="Project ID Verification" required>
-                                <input type="password" name="new_password" class="form-control" placeholder="New Password" required>
+                                <div class="input-group mb-3">
+                                    <input type="password" id="resetPassword" name="new_password" class="form-control" placeholder="New Password" required>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('resetPassword', this)" aria-label="Show password">👁</button>
+                                </div>
                                 <button type="submit" class="btn btn-warning w-100 mt-1">Confirm Reset</button>
                             </form>
                         </div>
@@ -319,6 +342,9 @@
             <form method="GET" action="/">
                 <label class="form-label"><small class="fw-bold text-secondary">Search Context / Keywords</small></label>
                 <input type="text" name="fuzzy" class="form-control" placeholder="Enter concepts or keywords..." value="{{ filters.get('fuzzy', '') }}">
+                <small class="text-muted d-block" style="font-size: 0.75em; margin-top: -10px; margin-bottom: 16px;">
+                    🌐 Any language works here — typos are okay too. Try "waves", "海浪", or "vagues".
+                </small>
 
                 <div class="sidebar-title">🔍 Filters</div>
                 
@@ -468,6 +494,81 @@
     </div>
 </div>
 
+<!-- LEGAL AGREEMENT MODAL — must be accepted before an account can be created -->
+<div class="modal fade" id="legalModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📜 Terms of Service &amp; Privacy Policy</h5>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    Please read the following before creating an account. You must click "I Agree" at the
+                    bottom to continue.
+                </p>
+
+                <h6>1. Acceptance of Terms</h6>
+                <p>
+                    By creating an account on ydrclibrary.com ("the Site"), you agree to be bound by these
+                    Terms of Service and our Privacy Policy. If you do not agree, do not create an account.
+                </p>
+
+                <h6>2. Account Registration</h6>
+                <p>
+                    You agree to provide accurate information when registering, to keep your login
+                    credentials confidential, and to be responsible for all activity under your account.
+                </p>
+
+                <h6>3. User Content</h6>
+                <p>
+                    Any comments, favorites, or other content you submit remain yours, but you grant the
+                    Site a license to display that content as part of the service. Do not post anything
+                    unlawful, abusive, or infringing on others' rights.
+                </p>
+
+                <h6>4. Data We Collect</h6>
+                <p>
+                    We store your email address, a hashed (not plaintext) version of your password, your
+                    nickname, and any comments or favorites you add, in order to operate your account.
+                </p>
+
+                <h6>5. Cookies &amp; Sessions</h6>
+                <p>
+                    The Site uses a session cookie to keep you logged in and to remember your favorites.
+                    This is required for the Site to function and is not used for advertising.
+                </p>
+
+                <h6>6. Termination</h6>
+                <p>
+                    We may suspend or remove accounts that violate these terms.
+                </p>
+
+                <h6>7. Disclaimer</h6>
+                <p>
+                    The Site is provided "as is" without warranties of any kind. Book recommendations and
+                    reading levels are provided for informational purposes only.
+                </p>
+
+                <h6>8. Changes to These Terms</h6>
+                <p>
+                    We may update these terms from time to time. Continued use of the Site after changes
+                    means you accept the updated terms.
+                </p>
+
+                <p class="text-muted mt-4" style="font-size: 0.85em;">
+                    ⚠️ This is placeholder legal text, not a legal document — it hasn't been drafted or
+                    reviewed by a lawyer. Replace this content with real Terms of Service and a Privacy
+                    Policy (ideally reviewed by an attorney) before relying on it.
+                </p>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary" id="legalDeclineBtn">Cancel</button>
+                <button type="button" class="btn btn-success" id="legalAgreeBtn">✅ I Agree</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     // Chart Initialization
@@ -514,6 +615,48 @@
                 .catch(() => {
                     img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
                 });
+        });
+    });
+
+    // Password show/hide toggle — shared by login, register, and reset-password fields
+    function togglePasswordVisibility(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = '🙈';
+            btn.setAttribute('aria-label', 'Hide password');
+        } else {
+            input.type = 'password';
+            btn.textContent = '👁';
+            btn.setAttribute('aria-label', 'Show password');
+        }
+    }
+
+    // Legal agreement gate — intercepts registration until "I Agree" is clicked
+    document.addEventListener("DOMContentLoaded", () => {
+        const registerForm = document.getElementById('registerForm');
+        const legalModalEl = document.getElementById('legalModal');
+        if (!registerForm || !legalModalEl) return;
+
+        const legalModal = new bootstrap.Modal(legalModalEl, { backdrop: 'static', keyboard: false });
+        let legalAgreed = false;
+
+        registerForm.addEventListener('submit', (e) => {
+            if (!legalAgreed) {
+                e.preventDefault();
+                legalModal.show();
+            }
+        });
+
+        document.getElementById('legalAgreeBtn').addEventListener('click', () => {
+            legalAgreed = true;
+            legalModal.hide();
+            registerForm.requestSubmit();
+        });
+
+        document.getElementById('legalDeclineBtn').addEventListener('click', () => {
+            legalModal.hide();
         });
     });
 </script>
