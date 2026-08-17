@@ -62,17 +62,40 @@
                         onclick="toggleRec('cn-{{ rec.num }}', this)">
                     {% if recommendations|length > 1 %}CN {{ rec.num }}{% else %}CN 中文理由{% endif %}
                 </button>
+                <button type="button"
+                        class="btn btn-outline-success rec-tab-btn"
+                        onclick="toggleRec('translate-{{ rec.num }}', this)">
+                    {% if recommendations|length > 1 %}🌐 Translate {{ rec.num }}{% else %}🌐 Translate{% endif %}
+                </button>
             {% endfor %}
         </div>
 
         {% for rec in recommendations %}
             <div id="rec-en-{{ rec.num }}" class="recommendation-box rec-panel" {% if not loop.first %}style="display: none;"{% endif %}>
-                {% if recommendations|length > 1 %}<div class="mb-2 text-muted" style="font-size:0.85em;">🙋 Recommended by {{ rec.recommender }}</div>{% endif %}
                 {{ rec.en }}
             </div>
             <div id="rec-cn-{{ rec.num }}" class="recommendation-box rec-panel" style="display: none;">
-                {% if recommendations|length > 1 %}<div class="mb-2 text-muted" style="font-size:0.85em;">🙋 Recommended by {{ rec.recommender }}</div>{% endif %}
                 {{ rec.cn }}
+            </div>
+            <div id="rec-translate-{{ rec.num }}" class="recommendation-box rec-panel translate-panel" style="display: none;" data-source-text="{{ rec.en }}">
+                <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                    <select class="form-select form-select-sm translate-lang-select" style="max-width: 220px;">
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="zh-CN">Chinese (Simplified)</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="ar">Arabic</option>
+                        <option value="hi">Hindi</option>
+                        <option value="vi">Vietnamese</option>
+                        <option value="it">Italian</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-success translate-btn">Translate</button>
+                </div>
+                <div class="translate-output text-muted">Pick a language and hit Translate to see the recommendation in that language.</div>
             </div>
         {% endfor %}
     </div>
@@ -118,6 +141,35 @@
         document.querySelectorAll('.rec-tab-btn').forEach(b => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
     }
+
+    // Translate tab: calls the /translate endpoint (server-side, hits Google
+    // Translate's public endpoint) and swaps in the result.
+    document.querySelectorAll('.translate-panel').forEach(panel => {
+        const btn = panel.querySelector('.translate-btn');
+        const select = panel.querySelector('.translate-lang-select');
+        const output = panel.querySelector('.translate-output');
+        const sourceText = panel.getAttribute('data-source-text') || '';
+
+        btn.addEventListener('click', () => {
+            const lang = select.value;
+            output.classList.add('text-muted');
+            output.textContent = 'Translating…';
+
+            fetch(`/translate?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(sourceText)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        output.textContent = data.error;
+                    } else {
+                        output.classList.remove('text-muted');
+                        output.textContent = data.translated;
+                    }
+                })
+                .catch(() => {
+                    output.textContent = 'Translation failed. Please try again.';
+                });
+        });
+    });
 
     // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page)
     document.addEventListener("DOMContentLoaded", () => {
