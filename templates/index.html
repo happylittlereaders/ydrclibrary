@@ -343,7 +343,7 @@
                 <label class="form-label"><small class="fw-bold text-secondary">Search Context / Keywords</small></label>
                 <input type="text" name="fuzzy" class="form-control" placeholder="Enter concepts or keywords..." value="{{ filters.get('fuzzy', '') }}">
                 <small class="text-muted d-block" style="font-size: 0.75em; margin-top: -10px; margin-bottom: 16px;">
-                    🌐 Any language works here — typos are okay too. Try "waves", "海浪", or "vagues".
+                    🌐 Works in any language.
                 </small>
 
                 <div class="sidebar-title">🔍 Filters</div>
@@ -503,8 +503,8 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted">
-                    Please read the following before creating an account. You must click "I Agree" at the
-                    bottom to continue.
+                    Please read the following before creating an account. Check the box and click
+                    "Create Account" at the bottom to continue.
                 </p>
 
                 <h6>1. Acceptance of Terms</h6>
@@ -519,37 +519,54 @@
                     credentials confidential, and to be responsible for all activity under your account.
                 </p>
 
-                <h6>3. User Content</h6>
+                <h6>3. User Conduct &amp; Content</h6>
                 <p>
-                    Any comments, favorites, or other content you submit remain yours, but you grant the
-                    Site a license to display that content as part of the service. Do not post anything
-                    unlawful, abusive, or infringing on others' rights.
+                    You agree not to post comments or other content that is harmful, illegal, hateful,
+                    threatening, or abusive. Any content you submit remains yours, but you grant the Site a
+                    license to display it as part of the service. Accounts that violate this policy may
+                    have their content removed and/or their account suspended or deleted at the Site's
+                    discretion, without notice.
                 </p>
 
-                <h6>4. Data We Collect</h6>
+                <h6>4. Data Usage Restrictions</h6>
+                <p>
+                    The book list, recommendations, and other data shown on the Site are provided for
+                    personal, non-commercial use only. You agree not to scrape, copy, republish, resell, or
+                    otherwise use this data — in whole or in part — for any commercial purpose without prior
+                    written permission from the Site.
+                </p>
+
+                <h6>5. Book Cover Images</h6>
+                <p>
+                    Book cover images displayed on the Site are sourced from third-party services (such as
+                    Open Library) for identification purposes only. You agree not to download, scrape,
+                    redistribute, or otherwise reuse these images outside of viewing them on the Site.
+                </p>
+
+                <h6>6. Data We Collect</h6>
                 <p>
                     We store your email address, a hashed (not plaintext) version of your password, your
                     nickname, and any comments or favorites you add, in order to operate your account.
                 </p>
 
-                <h6>5. Cookies &amp; Sessions</h6>
+                <h6>7. Cookies &amp; Sessions</h6>
                 <p>
                     The Site uses a session cookie to keep you logged in and to remember your favorites.
                     This is required for the Site to function and is not used for advertising.
                 </p>
 
-                <h6>6. Termination</h6>
+                <h6>8. Termination</h6>
                 <p>
                     We may suspend or remove accounts that violate these terms.
                 </p>
 
-                <h6>7. Disclaimer</h6>
+                <h6>9. Disclaimer</h6>
                 <p>
                     The Site is provided "as is" without warranties of any kind. Book recommendations and
                     reading levels are provided for informational purposes only.
                 </p>
 
-                <h6>8. Changes to These Terms</h6>
+                <h6>10. Changes to These Terms</h6>
                 <p>
                     We may update these terms from time to time. Continued use of the Site after changes
                     means you accept the updated terms.
@@ -561,9 +578,18 @@
                     Policy (ideally reviewed by an attorney) before relying on it.
                 </p>
             </div>
-            <div class="modal-footer d-flex justify-content-between">
-                <button type="button" class="btn btn-outline-secondary" id="legalDeclineBtn">Cancel</button>
-                <button type="button" class="btn btn-success" id="legalAgreeBtn">✅ I Agree</button>
+            <div class="modal-footer flex-column align-items-stretch gap-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="legalAgreeCheckbox">
+                    <label class="form-check-label" for="legalAgreeCheckbox">
+                        I have read and agree to the Terms of Service, Content Policy, and Data Usage
+                        Restrictions above.
+                    </label>
+                </div>
+                <div class="d-flex justify-content-between gap-2">
+                    <button type="button" class="btn btn-outline-secondary" id="legalDeclineBtn">Cancel</button>
+                    <button type="button" class="btn btn-success flex-grow-1" id="modalCreateAccountBtn" disabled>✨ Create Account</button>
+                </div>
             </div>
         </div>
     </div>
@@ -633,13 +659,16 @@
         }
     }
 
-    // Legal agreement gate — intercepts registration until "I Agree" is clicked
+    // Legal agreement gate — intercepts registration until the checkbox is
+    // checked and "Create Account" is clicked inside the modal.
     document.addEventListener("DOMContentLoaded", () => {
         const registerForm = document.getElementById('registerForm');
         const legalModalEl = document.getElementById('legalModal');
         if (!registerForm || !legalModalEl) return;
 
         const legalModal = new bootstrap.Modal(legalModalEl, { backdrop: 'static', keyboard: false });
+        const checkbox = document.getElementById('legalAgreeCheckbox');
+        const createBtn = document.getElementById('modalCreateAccountBtn');
         let legalAgreed = false;
 
         registerForm.addEventListener('submit', (e) => {
@@ -649,7 +678,12 @@
             }
         });
 
-        document.getElementById('legalAgreeBtn').addEventListener('click', () => {
+        checkbox.addEventListener('change', () => {
+            createBtn.disabled = !checkbox.checked;
+        });
+
+        createBtn.addEventListener('click', () => {
+            if (!checkbox.checked) return;
             legalAgreed = true;
             legalModal.hide();
             registerForm.requestSubmit();
