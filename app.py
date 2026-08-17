@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import pandas as pd
 from datetime import datetime
 from google.cloud import firestore
@@ -68,6 +68,79 @@ def check_hashes(password, hashed_text):
 def validate_email(email):
     """Check standard email format."""
     return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email) if email else False
+
+# ==========================================
+# 1b. Translation Helper (shared by /translate route and multilingual search)
+# ==========================================
+# Uses Google Translate's public web endpoint (the same one translate.google.com
+# uses in the browser) — no API key needed, but it's unofficial: no SLA, and
+# Google can rate-limit or change it without notice. If this ever starts
+# failing in production, the fix is to swap fetch_translation()'s internals
+# for an official provider (Google Cloud Translation API, DeepL, etc.) behind
+# an API key — everything that calls fetch_translation() stays the same.
+_translation_cache = {}
+_TRANSLATION_CACHE_MAX = 500  # cap so the cache can't grow unbounded in memory
+
+def fetch_translation(text, target_lang, source_lang="auto"):
+    """Translate `text` into `target_lang` (ISO code, e.g. 'es', 'zh-CN', 'en').
+    Raises on failure — callers decide how to degrade."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+
+    cache_key = (text, source_lang, target_lang)
+    if cache_key in _translation_cache:
+        return _translation_cache[cache_key]
+
+    resp = requests.get(
+        "https://translate.googleapis.com/translate_a/single",
+        params={
+            "client": "gtx",
+            "sl": source_lang,
+            "tl": target_lang,
+            "dt": "t",
+            "q": text,
+        },
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    # Response shape: [[[translated_chunk, original_chunk, ...], ...], ...]
+    translated = "".join(segment[0] for segment in data[0] if segment[0])
+
+    if len(_translation_cache) >= _TRANSLATION_CACHE_MAX:
+        _translation_cache.pop(next(iter(_translation_cache)))  # evict oldest-ish
+    _translation_cache[cache_key] = translated
+    return translated
+
+def contains_non_ascii(text):
+    return any(ord(ch) > 127 for ch in text)
+
+def maybe_translate_query(query):
+    """If the search query isn't plain ASCII (e.g. Chinese, Japanese, Cyrillic),
+    translate it to English so it can match the English-language book metadata.
+    Falls back to the original query on any translation failure so search never
+    hard-breaks just because the translate endpoint is down or rate-limited."""
+    if not contains_non_ascii(query):
+        return query
+    try:
+        return fetch_translation(query, target_lang="en")
+    except Exception as e:
+        print(f"⚠️ Query translation failed, falling back to raw query: {e}")
+        return query
+
+@app.route("/translate")
+def translate_route():
+    """Small JSON endpoint the detail page's Translate tab calls client-side."""
+    text = request.args.get("text", "")
+    target_lang = request.args.get("lang", "en").strip() or "en"
+    try:
+        translated = fetch_translation(text, target_lang=target_lang)
+        return jsonify({"translated": translated})
+    except Exception as e:
+        print(f"❌ Translation request failed: {e}")
+        return jsonify({"error": "Translation failed. Please try again."}), 500
 
 def get_user_role(email):
     """Determine user role: owner, admin, user, or guest."""
@@ -186,13 +259,29 @@ def fuzzy_rank(f_df, c, query, cutoff=65):
     n = len(f_df)
     scores = [0.0] * n
 
+    # Content words (len >= 4) from the query, checked as standalone substring
+    # matches below. The length-4 cutoff naturally skips common stopwords
+    # ("the", "of", "and") without a hardcoded stopword list, while still
+    # catching real content words. This mainly helps translated queries — a
+    # Chinese query translated to "the waves" won't substring-match "The
+    # Sound of Waves" as a whole phrase, but "waves" on its own will.
+    query_words = [w for w in query_lower.split() if len(w) >= 4]
+
     for col_idx in fields:
         values = f_df.iloc[:, col_idx].astype(str).tolist()
 
-        # Pass 1: exact substring match, instant max score.
+        # Pass 1: exact substring match (whole query), instant max score.
         for i, val in enumerate(values):
             if query_lower in val.lower():
                 scores[i] = 100.0
+
+        # Pass 1b: exact substring match on individual content words.
+        if query_words:
+            for i, val in enumerate(values):
+                if scores[i] < 100.0:
+                    val_lower = val.lower()
+                    if any(w in val_lower for w in query_words):
+                        scores[i] = 100.0
 
         # Pass 2: typo-tolerant fallback for everything else.
         results = process.extract(
@@ -234,9 +323,12 @@ def apply_filters(df, c, args):
 
     f_df = df.copy()
 
-    # Rank & filter by fuzzy match — see fuzzy_rank() above.
+    # Rank & filter by fuzzy match — see fuzzy_rank() above. Non-ASCII queries
+    # (Chinese, Japanese, etc.) get translated to English first so they can
+    # match the English-language book metadata — see maybe_translate_query().
     if f_fuzzy:
-        f_df = fuzzy_rank(f_df, c, f_fuzzy)
+        search_term = maybe_translate_query(f_fuzzy)
+        f_df = fuzzy_rank(f_df, c, search_term)
 
     # Specific field filtering
     if f_title:
@@ -490,7 +582,6 @@ def book_detail(book_idx):
             "num": i,
             "en": drow.iloc[c['en']],
             "cn": drow.iloc[c['cn']],
-            "recommender": drow.iloc[c['rec']],
         })
 
     # Fallback: should never trigger since `row` itself always matches
@@ -500,7 +591,6 @@ def book_detail(book_idx):
             "num": 1,
             "en": row.iloc[c['en']],
             "cn": row.iloc[c['cn']],
-            "recommender": row.iloc[c['rec']],
         }]
 
     comments = []
