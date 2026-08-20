@@ -21,6 +21,24 @@
 
     <h1>📖 {{ row.iloc[idx['title']] }}</h1>
 
+    <form action="{{ url_for('toggle_favorite') }}" method="POST" class="mb-3">
+        <input type="hidden" name="title" value="{{ row.iloc[idx['title']] }}">
+        <button type="submit" class="btn btn-outline-danger">
+            {% if row.iloc[idx['title']] in favorites %}❤️ Favorited (click to remove){% else %}🤍 Favorite this book{% endif %}
+        </button>
+    </form>
+
+    {% if user and user.role in ['admin', 'owner'] %}
+        <div class="mb-3 p-3" style="background:#fff8ec; border:1px dashed #e9c46a; border-radius:10px;">
+            <small class="fw-bold text-secondary d-block mb-2">🛠️ Admin: Set Global Like Count</small>
+            <form action="{{ url_for('set_like_count') }}" method="POST" class="d-flex gap-2">
+                <input type="hidden" name="title" value="{{ row.iloc[idx['title']] }}">
+                <input type="number" name="count" min="0" class="form-control form-control-sm" placeholder="New count" style="max-width: 140px;" required>
+                <button type="submit" class="btn btn-sm btn-warning">Update</button>
+            </form>
+        </div>
+    {% endif %}
+
     <div class="row mt-4">
         <div class="col-md-3">
             <div class="cover-container">
@@ -28,7 +46,7 @@
                      class="cover-img async-cover"
                      data-title="{{ row.iloc[idx['title']] }}"
                      data-author="{{ row.iloc[idx['author']] }}"
-                     src="https://via.placeholder.com/160x220?text=Loading..."
+                     src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>Loading...</text></svg>"
                      alt="Book Cover">
             </div>
         </div>
@@ -124,6 +142,13 @@
                     <span>📅 {{ c.time }}</span>
                 </div>
                 <div>{{ c.text }}</div>
+                {% if user and user.role in ['admin', 'owner'] %}
+                    <form action="{{ url_for('delete_comment') }}" method="POST" class="mt-2">
+                        <input type="hidden" name="comment_id" value="{{ c.id }}">
+                        <input type="hidden" name="book_idx" value="{{ book_idx }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this comment? This cannot be undone.');">🗑️ Delete</button>
+                    </form>
+                {% endif %}
             </div>
         {% else %}
             <p class="text-muted">No comments yet. Be the first to leave one!</p>
@@ -179,7 +204,7 @@
         const author = img.getAttribute('data-author');
 
         if (!title) {
-            img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+            img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
             return;
         }
 
@@ -190,11 +215,11 @@
                 if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
                     img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-L.jpg`;
                 } else {
-                    img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+                    img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
                 }
             })
             .catch(() => {
-                img.src = 'https://via.placeholder.com/160x220?text=No+Cover';
+                img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
             });
     });
 </script>
