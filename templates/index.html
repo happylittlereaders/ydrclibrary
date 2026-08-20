@@ -422,7 +422,7 @@
                                         <img class="cover-img async-cover" 
                                              data-title="{{ title }}" 
                                              data-author="{{ author }}"
-                                             src="https://via.placeholder.com/100x140?text=Loading..." 
+                                             src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='140'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>Loading...</text></svg>" 
                                              alt="{{ title }}">
                                     </div>
                                     <div class="tile-title">《{{ title }}》</div>
@@ -487,6 +487,24 @@
                         </div>
                     {% else %}
                         <div class="alert alert-light border" style="border-color: #e2d1b0 !important;">No favorites yet, go click ❤️!</div>
+                    {% endif %}
+
+                    <h3 class="mb-3 mt-5" style="color: #1e3d59;">🔥 Most Liked by Everyone</h3>
+                    {% if top_liked %}
+                        <div class="list-group">
+                            {% for item in top_liked %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center" style="border-radius: 8px; margin-bottom: 8px;">
+                                    {% if item.book_idx is not none %}
+                                        <a href="{{ url_for('book_detail', book_idx=item.book_idx) }}" class="text-decoration-none">🔥 <b>{{ item.title }}</b></a>
+                                    {% else %}
+                                        <span>🔥 <b>{{ item.title }}</b></span>
+                                    {% endif %}
+                                    <span class="badge" style="background-color:#ff6e40;">{{ item.count }} ❤️</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-light border" style="border-color: #e2d1b0 !important;">No likes yet — be the first to favorite a book!</div>
                     {% endif %}
                 </div>
             </div>
@@ -571,6 +589,12 @@
                     We may update these terms from time to time. Continued use of the Site after changes
                     means you accept the updated terms.
                 </p>
+
+                <p class="text-muted mt-4" style="font-size: 0.85em;">
+                    ⚠️ This is placeholder legal text, not a legal document — it hasn't been drafted or
+                    reviewed by a lawyer. Replace this content with real Terms of Service and a Privacy
+                    Policy (ideally reviewed by an attorney) before relying on it.
+                </p>
             </div>
             <div class="modal-footer flex-column align-items-stretch gap-2">
                 <div class="form-check">
@@ -617,7 +641,7 @@
             const author = img.getAttribute('data-author');
 
             if (!title) {
-                img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='140'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
                 return;
             }
 
@@ -629,11 +653,11 @@
                     if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
                         img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-M.jpg`;
                     } else {
-                        img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                        img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='140'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
                     }
                 })
                 .catch(() => {
-                    img.src = 'https://via.placeholder.com/100x140?text=No+Cover';
+                    img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='140'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
                 });
         });
     });
