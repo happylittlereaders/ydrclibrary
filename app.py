@@ -9,6 +9,8 @@ import json
 import os
 import io
 import random
+import time
+import threading
 import traceback
 import requests
 from rapidfuzz import process, fuzz
@@ -148,6 +150,57 @@ def translate_route():
         print(f"❌ Translation request failed: {e}")
         return jsonify({"error": "Translation failed. Please try again."}), 500
 
+# ==========================================
+# 1d. Book Cover Lookup (server-side proxy for OpenLibrary)
+# ==========================================
+# OpenLibrary's search.json endpoint doesn't send CORS headers, so calling it
+# directly from browser JS via fetch() gets silently blocked by the browser —
+# unlike an <img src="..."> tag, a fetch() response is subject to CORS, and
+# without Access-Control-Allow-Origin the browser refuses to hand the response
+# body to JS at all. Server-to-server requests aren't subject to CORS (that's
+# a browser-only concept), so the fix is to have Flask do the OpenLibrary
+# lookup and hand back just the resolved cover URL; the frontend fetches that
+# from our own domain instead, which is same-origin and unaffected by CORS.
+_cover_cache = {}
+_COVER_CACHE_MAX = 1000
+
+@app.route("/cover-lookup")
+def cover_lookup():
+    title = request.args.get("title", "").strip()
+    author = request.args.get("author", "").strip()
+    size = request.args.get("size", "M").strip().upper()
+    if size not in ("S", "M", "L"):
+        size = "M"
+
+    if not title:
+        return jsonify({"cover_url": None})
+
+    cache_key = (title.lower(), author.lower(), size)
+    if cache_key in _cover_cache:
+        return jsonify({"cover_url": _cover_cache[cache_key]})
+
+    cover_url = None
+    try:
+        resp = requests.get(
+            "https://openlibrary.org/search.json",
+            params={"q": f"{title} {author}".strip(), "limit": 1},
+            # OpenLibrary asks API consumers to set a descriptive User-Agent.
+            headers={"User-Agent": "ydrclibrary.com/1.0 (book cover lookup)"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        docs = resp.json().get("docs", [])
+        if docs and docs[0].get("cover_i"):
+            cover_url = f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-{size}.jpg"
+    except Exception as e:
+        print(f"⚠️ Cover lookup failed for {title!r}: {e}")
+
+    if len(_cover_cache) >= _COVER_CACHE_MAX:
+        _cover_cache.pop(next(iter(_cover_cache)))  # evict oldest-ish
+    _cover_cache[cache_key] = cover_url
+
+    return jsonify({"cover_url": cover_url})
+
 def get_user_role(email):
     """Determine user role: owner, admin, user, or guest."""
     if not db or not email:
@@ -229,6 +282,9 @@ def get_top_liked_books(limit=10):
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/1wqamTRHb2vUHU_JXFq38NlYy6uQUguEHbuv0XQfdW5M/export?format=csv&gid=897583843"
 _cached_df = None
+_data_lock = threading.Lock()  # prevents concurrent requests from all firing
+                                 # simultaneous slow fetches at Google when the
+                                 # cache is cold (e.g. right after a deploy)
 
 def load_data():
     """Load Google Sheet dataset and clean numerical values instantly without blocking HTTP calls."""
@@ -236,60 +292,82 @@ def load_data():
     if _cached_df is not None:
         return _cached_df
 
-    try:
-        # Fetch manually with a browser-like User-Agent — Google Sheets export links
-        # sometimes reject/redirect bare urllib requests (which is what pd.read_csv
-        # uses internally) when they come from a datacenter IP like Render's.
-        resp = requests.get(CSV_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-        resp.raise_for_status()
+    with _data_lock:
+        # Double-checked: another thread may have already loaded the data
+        # while we were waiting for the lock.
+        if _cached_df is not None:
+            return _cached_df
 
-        # If Google didn't give us CSV (e.g. an HTML sign-in/interstitial page
-        # because of a sharing-permission issue), fail loudly instead of silently.
-        content_type = resp.headers.get("Content-Type", "")
-        if "csv" not in content_type and resp.text.lstrip().startswith("<"):
-            raise ValueError(
-                f"Expected CSV but got content-type={content_type!r}; "
-                f"first 200 chars: {resp.text[:200]!r}"
-            )
+        last_error = None
+        # Google's CSV export endpoint occasionally times out or 502s
+        # transiently (this isn't Render-specific — it happens from Google's
+        # side sometimes). A few retries with backoff turns a brief blip into
+        # a non-event instead of a full site outage for every visitor who
+        # happens to hit the cold cache during that window.
+        for attempt in range(3):
+            try:
+                # Fetch manually with a browser-like User-Agent — Google Sheets export links
+                # sometimes reject/redirect bare urllib requests (which is what pd.read_csv
+                # uses internally) when they come from a datacenter IP like Render's.
+                resp = requests.get(CSV_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+                resp.raise_for_status()
 
-        df = pd.read_csv(io.StringIO(resp.text))
+                # If Google didn't give us CSV (e.g. an HTML sign-in/interstitial page
+                # because of a sharing-permission issue), fail loudly instead of silently.
+                content_type = resp.headers.get("Content-Type", "")
+                if "csv" not in content_type and resp.text.lstrip().startswith("<"):
+                    raise ValueError(
+                        f"Expected CSV but got content-type={content_type!r}; "
+                        f"first 200 chars: {resp.text[:200]!r}"
+                    )
 
-        c = {
-            "il": 1, "rec": 2, "title": 3, "author": 5,
-            "quiz": 6, "ar": 7, "word": 8, "fnf": 9,
-            "topic": 10, "series": 11, "en": 12, "cn": 13
-        }
+                df = pd.read_csv(io.StringIO(resp.text))
 
-        # Resolve positional indices to actual column names once, up front.
-        # (Everywhere else in the app still reads via `c` + iloc, which is fine —
-        # this only affects the in-place *writes* below.)
-        ar_col = df.columns[c['ar']]
-        word_col = df.columns[c['word']]
+                c = {
+                    "il": 1, "rec": 2, "title": 3, "author": 5,
+                    "quiz": 6, "ar": 7, "word": 8, "fnf": 9,
+                    "topic": 10, "series": 11, "en": 12, "cn": 13
+                }
 
-        # Format ATOS Book Level column to float — assign by column name, not
-        # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
-        # silently upcasting a column's dtype through positional iloc-assignment.
-        # .round(1) matters here: binary floats can't represent decimals like
-        # 5.7 exactly, so two rows that both "mean" 5.7 can land as slightly
-        # different floats (5.7 vs 5.699999999999999) and get treated as
-        # separate buckets by value_counts() later — showing up as a stray
-        # near-invisible sliver bar next to the real one on the chart.
-        df[ar_col] = pd.to_numeric(
-            df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
-            errors='coerce'
-        ).fillna(0.0).round(1)
+                # Resolve positional indices to actual column names once, up front.
+                # (Everywhere else in the app still reads via `c` + iloc, which is fine —
+                # this only affects the in-place *writes* below.)
+                ar_col = df.columns[c['ar']]
+                word_col = df.columns[c['word']]
 
-        # Format Word Count column to integer — same fix
-        word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
-        df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
+                # Format ATOS Book Level column to float — assign by column name, not
+                # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
+                # silently upcasting a column's dtype through positional iloc-assignment.
+                # .round(1) matters here: binary floats can't represent decimals like
+                # 5.7 exactly, so two rows that both "mean" 5.7 can land as slightly
+                # different floats (5.7 vs 5.699999999999999) and get treated as
+                # separate buckets by value_counts() later — showing up as a stray
+                # near-invisible sliver bar next to the real one on the chart.
+                df[ar_col] = pd.to_numeric(
+                    df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
+                    errors='coerce'
+                ).fillna(0.0).round(1)
 
-        df = df.fillna(" ")
+                # Format Word Count column to integer — same fix
+                word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
 
-        _cached_df = (df, c)
-        return _cached_df
-    except Exception as e:
-        # Print full traceback (not just str(e)) so Render logs show the real cause
-        print(f"❌ Data loading failed: {e}")
+                df = df.fillna(" ")
+
+                _cached_df = (df, c)
+                return _cached_df
+
+            except Exception as e:
+                last_error = e
+                print(f"⚠️ Data load attempt {attempt + 1}/3 failed: {e}")
+                if attempt < 2:
+                    time.sleep(2 ** attempt)  # 1s, then 2s before retrying
+
+        # All retries exhausted — print full traceback (not just str(e)) so
+        # Render logs show the real cause, and give up for this request.
+        # _cached_df stays None, so the NEXT request will try again from
+        # scratch rather than being stuck on a cached failure forever.
+        print(f"❌ Data loading failed after 3 attempts: {last_error}")
         traceback.print_exc()
         return pd.DataFrame(), {}
 
@@ -426,6 +504,17 @@ def apply_filters(df, c, args):
 # ==========================================
 # 5. Main Dashboard & Search Routes
 # ==========================================
+@app.route("/healthz")
+def healthz():
+    """Dedicated health-check endpoint, independent of the Google Sheets fetch.
+    Render's platform health check hits '/' by default — since index() 500s
+    whenever the sheet is temporarily unreachable, that made Render think the
+    ENTIRE app was down during a transient Google blip and restart it, right
+    as it was trying to recover. Point Render's health check at this route
+    instead (see render.yaml's healthCheckPath) so a slow/failing external
+    dependency doesn't take down an otherwise-healthy process."""
+    return "OK", 200
+
 @app.route("/", methods=["GET"])
 def index():
     df, c = load_data()
