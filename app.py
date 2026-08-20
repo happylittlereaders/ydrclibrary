@@ -17,6 +17,12 @@ app = Flask(__name__)
 # Uses the secret key set in Render environment variables
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")
 
+# Hardcoded admin allowlist — accounts here get "admin" role automatically
+# regardless of what's stored in Firestore, so we don't need a promote-user
+# UI just to grant this one account moderation powers. Emails compared
+# lowercase; add more here (comma-free, one per line) if needed later.
+ADMIN_EMAILS = {"peishixy@gmail.com"}
+
 # ==========================================
 # Safe Conversion Helpers (Prevents 500 Errors)
 # ==========================================
@@ -148,6 +154,12 @@ def get_user_role(email):
         return "guest"
     if email == os.environ.get("OWNER_EMAIL", ""):
         return "owner"
+    # Hardcoded admin grant. Deliberately matched on email only — matching on
+    # a self-chosen nickname instead would let anyone register with that
+    # nickname and grant themselves admin, which is a privilege-escalation
+    # hole. Add more addresses to this set if more admins are needed.
+    if email.strip().lower() in ADMIN_EMAILS:
+        return "admin"
     try:
         doc = db.collection("users").document(email).get()
         if doc.exists:
@@ -155,6 +167,62 @@ def get_user_role(email):
     except Exception as e:
         print(f"Error fetching role: {e}")
     return "guest"
+
+def is_admin(user):
+    """True if the logged-in `user` (session dict) has admin or owner privileges."""
+    return bool(user) and user.get("role") in ("admin", "owner")
+
+# ==========================================
+# 1c. Global "Most Liked" Counter (Firestore-backed)
+# ==========================================
+# Per-user favorites live in the session cookie (see toggle_favorite below) —
+# that's fine for "your favorites" but can't answer "what does everyone like",
+# since nothing about it is shared across visitors. This is a small separate
+# Firestore collection just for that global tally: one document per book,
+# incremented/decremented every time *anyone* favorites/unfavorites it.
+def _book_like_doc_id(title):
+    """Firestore document IDs can't contain '/', have length limits, and
+    titles could theoretically collide/contain odd characters — hashing
+    sidesteps all of that. The human-readable title is still stored as a
+    field on the document itself for display/lookup."""
+    return hashlib.sha256((title or "").strip().lower().encode("utf-8")).hexdigest()[:24]
+
+def adjust_book_like_count(title, delta):
+    """Increment/decrement a book's global like count. No-ops quietly if
+    Firestore isn't configured — favoriting still works locally either way,
+    it just won't show up in the global "Most Liked" list."""
+    title = (title or "").strip()
+    if not db or not title:
+        return
+    try:
+        doc_ref = db.collection("book_likes").document(_book_like_doc_id(title))
+        doc_ref.set({"title": title, "count": firestore.Increment(delta)}, merge=True)
+    except Exception as e:
+        print(f"Error adjusting like count for {title!r}: {e}")
+
+def get_top_liked_books(limit=10):
+    """Top N books by global like count, most-liked first. Returns [] if
+    Firestore isn't configured or the query fails — callers should treat an
+    empty list as 'nothing to show yet', not an error."""
+    if not db:
+        return []
+    try:
+        docs = (
+            db.collection("book_likes")
+            .order_by("count", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .stream()
+        )
+        results = []
+        for d in docs:
+            data = d.to_dict()
+            count = data.get("count", 0)
+            if count and count > 0:
+                results.append({"title": data.get("title", ""), "count": count})
+        return results
+    except Exception as e:
+        print(f"Error fetching top liked books: {e}")
+        return []
 
 # ==========================================
 # 2. Data Loading Service (Optimized)
@@ -393,6 +461,21 @@ def index():
     if "favorites" not in session:
         session["favorites"] = []
 
+    # Global "Most Liked" list — separate from the session-only favorites
+    # above. Resolve each liked title back to a book_idx (for linking to its
+    # detail page) by matching against the full dataset; a title with no
+    # match just renders without a link (can happen if the sheet's title
+    # text changed since it was liked).
+    top_liked = get_top_liked_books(limit=10)
+    if top_liked:
+        title_to_idx = {}
+        for i, t in enumerate(df.iloc[:, c['title']].astype(str)):
+            key = t.strip().lower()
+            if key not in title_to_idx:
+                title_to_idx[key] = i
+        for item in top_liked:
+            item["book_idx"] = title_to_idx.get(item["title"].strip().lower())
+
     # Clean filters passed to pagination links
     filters_clean = {k: v for k, v in args.items() if k != 'page' and v != ''}
 
@@ -407,6 +490,7 @@ def index():
         filters=filters_clean,
         user=session.get("user"),
         favorites=session.get("favorites", []),
+        top_liked=top_liked,
         level_counts=level_counts
     )
 
@@ -444,8 +528,10 @@ def toggle_favorite():
     favs = session.get("favorites", [])
     if title in favs:
         favs.remove(title)
+        adjust_book_like_count(title, -1)
     else:
         favs.append(title)
+        adjust_book_like_count(title, 1)
     session["favorites"] = favs
     session.modified = True
     return redirect(request.referrer or url_for("index"))
@@ -610,7 +696,8 @@ def book_detail(book_idx):
         book_idx=book_idx,
         comments=comments,
         recommendations=recommendations,
-        user=session.get("user")
+        user=session.get("user"),
+        favorites=session.get("favorites", [])
     )
 
 @app.route("/comment/add", methods=["POST"])
@@ -639,6 +726,58 @@ def add_comment():
             flash(f"Error posting comment: {e}", "danger")
 
     return redirect(url_for("book_detail", book_idx=book_idx))
+
+@app.route("/comment/delete", methods=["POST"])
+def delete_comment():
+    """Admin/owner only — deletes a single comment by its Firestore doc id."""
+    user = session.get("user")
+    book_idx = request.form.get("book_idx")
+
+    if not is_admin(user):
+        flash("You don't have permission to delete comments.", "danger")
+        return redirect(url_for("book_detail", book_idx=book_idx) if book_idx else url_for("index"))
+
+    comment_id = request.form.get("comment_id")
+
+    if db and comment_id:
+        try:
+            db.collection("comments").document(comment_id).delete()
+            flash("Comment deleted.", "success")
+        except Exception as e:
+            flash(f"Error deleting comment: {e}", "danger")
+
+    return redirect(url_for("book_detail", book_idx=book_idx) if book_idx else url_for("index"))
+
+@app.route("/admin/set-like-count", methods=["POST"])
+def set_like_count():
+    """Admin/owner only — directly sets (not increments) a book's global
+    like count, e.g. to correct it after removing spammy/bot favoriting."""
+    user = session.get("user")
+
+    if not is_admin(user):
+        flash("You don't have permission to do that.", "danger")
+        return redirect(request.referrer or url_for("index"))
+
+    title = request.form.get("title", "").strip()
+    count_raw = request.form.get("count", "").strip()
+
+    if not db:
+        flash("Database service unavailable.", "danger")
+    elif not title or count_raw == "":
+        flash("A title and count are required.", "warning")
+    else:
+        new_count = safe_int(count_raw, None)
+        if new_count is None or new_count < 0:
+            flash("Please enter a valid non-negative whole number.", "warning")
+        else:
+            try:
+                doc_ref = db.collection("book_likes").document(_book_like_doc_id(title))
+                doc_ref.set({"title": title, "count": new_count}, merge=True)
+                flash(f"Updated like count for \"{title}\" to {new_count}.", "success")
+            except Exception as e:
+                flash(f"Error updating like count: {e}", "danger")
+
+    return redirect(request.referrer or url_for("index"))
 
 # ==========================================
 # 10. Application Entrypoint
