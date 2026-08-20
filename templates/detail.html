@@ -195,7 +195,14 @@
         });
     });
 
-    // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page)
+    // No-cover placeholder — see the same comment in index.html's script for
+    // why this is a double-quoted JS string wrapping single-quoted SVG markup.
+    const NO_COVER_SVG = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>";
+
+    // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page).
+    // Calls our own /cover-lookup endpoint (server-side proxy to OpenLibrary)
+    // instead of openlibrary.org directly — OpenLibrary's search API doesn't
+    // send CORS headers, so a direct browser fetch() to it gets blocked.
     document.addEventListener("DOMContentLoaded", () => {
         const img = document.getElementById('detail-cover');
         if (!img) return;
@@ -204,22 +211,17 @@
         const author = img.getAttribute('data-author');
 
         if (!title) {
-            img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
+            img.src = NO_COVER_SVG;
             return;
         }
 
-        const query = encodeURIComponent(`${title} ${author}`);
-        fetch(`https://openlibrary.org/search.json?q=${query}&limit=1`)
+        fetch(`/cover-lookup?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&size=L`)
             .then(response => response.json())
             .then(data => {
-                if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
-                    img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-L.jpg`;
-                } else {
-                    img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
-                }
+                img.src = data.cover_url || NO_COVER_SVG;
             })
             .catch(() => {
-                img.src = 'data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>';
+                img.src = NO_COVER_SVG;
             });
     });
 </script>
