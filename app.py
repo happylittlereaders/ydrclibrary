@@ -541,6 +541,23 @@ def apply_filters(df, c, args):
 
     return f_df
 
+def dedup_books(f_df, c):
+    """Collapses duplicate rows for the same book (same title+author,
+    case/whitespace-insensitive) down to a single row — used wherever a
+    filtered set of books is displayed as a list of distinct books (the
+    gallery grid, the blind box's random pick). A book recommended by
+    multiple people currently exists as multiple rows in the sheet; those
+    all still show up together as separate recommendation tabs on the book's
+    own detail page (see book_detail()'s title/author matching) — this only
+    dedupes them for *listing* purposes so the same book doesn't appear as
+    several separate tiles. Keeps the first occurrence of each book, so
+    ordering (e.g. fuzzy-search relevance ranking) is preserved."""
+    dedup_keys = pd.DataFrame({
+        'title_key': f_df.iloc[:, c['title']].astype(str).str.strip().str.lower(),
+        'author_key': f_df.iloc[:, c['author']].astype(str).str.strip().str.lower(),
+    }, index=f_df.index)
+    return f_df.loc[~dedup_keys.duplicated(keep='first')]
+
 # ==========================================
 # 5. Main Dashboard & Search Routes
 # ==========================================
@@ -565,6 +582,12 @@ def index():
     args = request.args.to_dict()
 
     f_df = apply_filters(df, c, args)
+
+    # Collapse duplicate rows (the same book recommended by several people)
+    # down to one tile per unique book — see dedup_books(). Level counts and
+    # pagination below are computed AFTER this so they reflect distinct
+    # books, not one count per recommender.
+    f_df = dedup_books(f_df, c)
 
     # Calculate level distribution for Chart.js.
     # Excludes 0 — that's the placeholder for books with no ATOS level in the
@@ -636,6 +659,10 @@ def blind_box():
 
     args = request.args.to_dict()
     f_df = apply_filters(df, c, args)
+    # Same dedup as the gallery — without this, a book recommended by many
+    # people would be many times more likely to get picked than a book
+    # recommended once, since each recommendation is its own row.
+    f_df = dedup_books(f_df, c)
 
     filters_clean = {k: v for k, v in args.items() if v != ''}
 
@@ -646,7 +673,9 @@ def blind_box():
     # f_df retains original row indices from the full dataframe, so this stays
     # consistent with the book_idx used by book_detail()
     random_idx = random.choice(f_df.index.tolist())
-    return redirect(url_for("book_detail", book_idx=random_idx))
+    # Carry the active filters through so "Back to Search" on the detail page
+    # returns to this same filtered view, same as clicking a book from the gallery.
+    return redirect(url_for("book_detail", book_idx=random_idx, **filters_clean))
 
 # ==========================================
 # 7. User Favorites Route
@@ -775,20 +804,29 @@ def book_detail(book_idx):
     if book_idx < 0 or book_idx >= len(df):
         return "Book not found", 404
 
+    # Filters carried over from the gallery/blind-box link that led here (see
+    # the "View Details" link in index.html and blind_box() above), used to
+    # power the "Back to Search" button — returns the person to the exact
+    # filtered view they came from instead of a blank gallery.
+    back_filters = {k: v for k, v in request.args.items() if v != ''}
+
     row = df.iloc[book_idx]
     title = str(row.iloc[c['title']])
     author = str(row.iloc[c['author']])
 
     # ------------------------------------------------------------------
     # Find every row in the full dataset that represents the SAME book
-    # (matched on title + author) so that duplicate entries — e.g. the
-    # same book recommended by multiple people — surface as multiple
-    # numbered EN/CN recommendation tabs instead of only showing
-    # whichever single row happened to be clicked.
+    # (matched on title + author, case/whitespace-insensitive — same
+    # matching rule as dedup_books() uses for the gallery listing, so a
+    # book collapsed into one gallery tile always aggregates the same set
+    # of rows here) so that duplicate entries — e.g. the same book
+    # recommended by multiple people — surface as multiple numbered EN/CN
+    # recommendation tabs instead of only showing whichever single row
+    # happened to be clicked.
     # ------------------------------------------------------------------
-    title_col = df.iloc[:, c['title']].astype(str).str.strip()
-    author_col = df.iloc[:, c['author']].astype(str).str.strip()
-    dup_mask = (title_col == title.strip()) & (author_col == author.strip())
+    title_col = df.iloc[:, c['title']].astype(str).str.strip().str.lower()
+    author_col = df.iloc[:, c['author']].astype(str).str.strip().str.lower()
+    dup_mask = (title_col == title.strip().lower()) & (author_col == author.strip().lower())
     dup_rows = df[dup_mask]
 
     recommendations = []
@@ -826,7 +864,8 @@ def book_detail(book_idx):
         comments=comments,
         recommendations=recommendations,
         user=session.get("user"),
-        favorites=session.get("favorites", [])
+        favorites=session.get("favorites", []),
+        back_filters=back_filters
     )
 
 @app.route("/comment/add", methods=["POST"])
