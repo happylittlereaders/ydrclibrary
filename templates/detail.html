@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>《{{ row.iloc[idx['title']] }}》- Book Details</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='YDRC-logo.png') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         body { background-color: #fdf6e3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -13,9 +14,27 @@
         .cover-container { display: flex; justify-content: center; align-items: center; height: 220px; background: #fafafa; border-radius: 6px; overflow: hidden; }
         .cover-img { max-height: 220px; max-width: 100%; border-radius: 6px; object-fit: contain; transition: opacity 0.3s ease; }
         .rec-tab-btn { margin-bottom: 6px; }
+
+        /* TOP NAVBAR */
+        .top-navbar {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e2d1b0;
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+        }
+
+        .top-navbar-logo {
+            max-height: 44px;
+        }
     </style>
 </head>
 <body>
+<nav class="top-navbar">
+    <a href="{{ url_for('index') }}">
+        <img src="{{ url_for('static', filename='YDRC-logo.png') }}" class="top-navbar-logo" alt="YDRC Library Logo" onerror="this.style.display='none'">
+    </a>
+</nav>
 <div class="container py-4">
     <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mb-3">⬅️ Back to Library</a>
 
@@ -199,10 +218,9 @@
     // why this is a double-quoted JS string wrapping single-quoted SVG markup.
     const NO_COVER_SVG = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>No Cover</text></svg>";
 
-    // Client-Side Asynchronous Cover Image Loader (same approach as the gallery page).
-    // Calls our own /cover-lookup endpoint (server-side proxy to OpenLibrary)
-    // instead of openlibrary.org directly — OpenLibrary's search API doesn't
-    // send CORS headers, so a direct browser fetch() to it gets blocked.
+    // Client-Side Asynchronous Cover Image Loader (same approach as the
+    // gallery page — fetches directly from OpenLibrary, reverted from the
+    // server-proxy approach for speed; see index.html's script for why).
     document.addEventListener("DOMContentLoaded", () => {
         const img = document.getElementById('detail-cover');
         if (!img) return;
@@ -215,10 +233,15 @@
             return;
         }
 
-        fetch(`/cover-lookup?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&size=L`)
+        const query = encodeURIComponent(`${title} ${author}`);
+        fetch(`https://openlibrary.org/search.json?q=${query}&limit=1`)
             .then(response => response.json())
             .then(data => {
-                img.src = data.cover_url || NO_COVER_SVG;
+                if (data.docs && data.docs.length > 0 && data.docs[0].cover_i) {
+                    img.src = `https://covers.openlibrary.org/b/id/${data.docs[0].cover_i}-L.jpg`;
+                } else {
+                    img.src = NO_COVER_SVG;
+                }
             })
             .catch(() => {
                 img.src = NO_COVER_SVG;
