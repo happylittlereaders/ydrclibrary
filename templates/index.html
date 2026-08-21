@@ -457,7 +457,7 @@
                                             {% if title in favorites %}❤️{% else %}🤍{% endif %}
                                         </button>
                                     </form>
-                                    <a href="{{ url_for('book_detail', book_idx=orig_idx) }}" class="btn btn-outline-secondary btn-sm flex-grow-1" style="border-radius: 8px;">View Details</a>
+                                    <a href="{{ url_for('book_detail', book_idx=orig_idx, **filters) }}" class="btn btn-outline-secondary btn-sm flex-grow-1" style="border-radius: 8px;">View Details</a>
                                 </div>
                             </div>
                         </div>
