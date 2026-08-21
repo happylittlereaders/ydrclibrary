@@ -229,14 +229,82 @@ def get_top_liked_books(limit=10):
 # ==========================================
 # 2. Data Loading Service (Optimized)
 # ==========================================
-CSV_URL = "https://docs.google.com/spreadsheets/d/1wqamTRHb2vUHU_JXFq38NlYy6uQUguEHbuv0XQfdW5M/export?format=csv&gid=897583843"
+# Two Google Sheets feed the library now:
+#
+# 1. Historical Booklist Data — the main published catalog. NO header row;
+#    data starts immediately, and its column positions already line up with
+#    `c` below (title=3, author=5, ar=7, word=8, fnf=9, topic=10, series=11,
+#    en=12, cn=13).
+# 2. Submission Form Responses — new recommendations coming in through a
+#    Google Form, with a real header row and a much wider set of columns,
+#    since it also tracks a moderation pipeline (Self Check, 2nd Check,
+#    Design Check, Publish, etc.) that isn't part of the book data itself.
+#    Every submitted row is shown regardless of that pipeline's status — the
+#    workflow columns aren't used as a display filter, only entirely blank
+#    rows (a submission started but never filled in) are dropped.
+HISTORICAL_CSV_URL = "https://docs.google.com/spreadsheets/d/1fmdFvMk85ByKhLO4wWgMFhsvtAuj63vBE-k3pgWfBew/export?format=csv&gid=0"
+FORM_CSV_URL = "https://docs.google.com/spreadsheets/d/1BRJCPLYCRzXXramQaarN_MCvzVSJYlpNEQk1semmfoM/export?format=csv&gid=233242005"
+
+# Maps the book-data columns of the Submission Form sheet onto the same
+# positional layout the (now column-shifted) Historical sheet uses: every
+# field one position right of where it used to sit (il=2, title=4, ...,
+# cn=14), since the Historical sheet's columns were manually shifted right by
+# one to line up with the Submission Form's existing layout. Position 0 and 1
+# (blank/Timestamp+Email) have no equivalent field the app displays, so
+# they're left unmapped.
+FORM_COLUMN_MAP = {
+    2: 'Interest Level',
+    3: 'Recommended by',
+    4: 'Book Title',
+    5: 'AR Website (Amazon link if N/A)',
+    6: 'Author',
+    7: 'AR Quiz Number (0 if N/A, No Spaces)',
+    8: 'ATOS Book Level (0 if N/A, No Spaces)',
+    9: 'Word Count (0 if N/A, No Spaces)',
+    10: 'Fiction/Nonfiction (N/A if not on ARBookfind)',
+    11: 'Topic-Subtopic (N/A if none)',
+    12: 'Series (N/A if none)',
+    13: 'ENGLISH - Personal Recommendation',
+    14: 'CHINESE - Personal Recommendation',
+}
+
 _cached_df = None
 _data_lock = threading.Lock()  # prevents concurrent requests from all firing
                                  # simultaneous slow fetches at Google when the
                                  # cache is cold (e.g. right after a deploy)
 
+def _fetch_sheet_csv(url, label):
+    """Fetch a Google Sheet CSV export with retries/backoff. Google's export
+    endpoint occasionally times out or 502s transiently (not Render-specific —
+    it happens from Google's side sometimes); a few retries turns a brief
+    blip into a non-event. Raises the last exception if all attempts fail."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            # Browser-like User-Agent — Google Sheets export links sometimes
+            # reject/redirect bare urllib requests (what pd.read_csv uses
+            # internally) when they come from a datacenter IP like Render's.
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+            resp.raise_for_status()
+
+            # If Google didn't give us CSV (e.g. an HTML sign-in/interstitial
+            # page because of a sharing-permission issue), fail loudly.
+            content_type = resp.headers.get("Content-Type", "")
+            if "csv" not in content_type and resp.text.lstrip().startswith("<"):
+                raise ValueError(
+                    f"Expected CSV but got content-type={content_type!r} for {label}; "
+                    f"first 200 chars: {resp.text[:200]!r}"
+                )
+            return resp.text
+        except Exception as e:
+            last_error = e
+            print(f"⚠️ {label} fetch attempt {attempt + 1}/3 failed: {e}")
+            if attempt < 2:
+                time.sleep(2 ** attempt)  # 1s, then 2s before retrying
+    raise last_error
+
 def load_data():
-    """Load Google Sheet dataset and clean numerical values instantly without blocking HTTP calls."""
+    """Load and merge both Google Sheets, cleaning numerical values."""
     global _cached_df
     if _cached_df is not None:
         return _cached_df
@@ -247,77 +315,73 @@ def load_data():
         if _cached_df is not None:
             return _cached_df
 
-        last_error = None
-        # Google's CSV export endpoint occasionally times out or 502s
-        # transiently (this isn't Render-specific — it happens from Google's
-        # side sometimes). A few retries with backoff turns a brief blip into
-        # a non-event instead of a full site outage for every visitor who
-        # happens to hit the cold cache during that window.
-        for attempt in range(3):
-            try:
-                # Fetch manually with a browser-like User-Agent — Google Sheets export links
-                # sometimes reject/redirect bare urllib requests (which is what pd.read_csv
-                # uses internally) when they come from a datacenter IP like Render's.
-                resp = requests.get(CSV_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-                resp.raise_for_status()
+        try:
+            historical_text = _fetch_sheet_csv(HISTORICAL_CSV_URL, "Historical Booklist Data")
+            form_text = _fetch_sheet_csv(FORM_CSV_URL, "Submission Form Responses")
 
-                # If Google didn't give us CSV (e.g. an HTML sign-in/interstitial page
-                # because of a sharing-permission issue), fail loudly instead of silently.
-                content_type = resp.headers.get("Content-Type", "")
-                if "csv" not in content_type and resp.text.lstrip().startswith("<"):
-                    raise ValueError(
-                        f"Expected CSV but got content-type={content_type!r}; "
-                        f"first 200 chars: {resp.text[:200]!r}"
-                    )
+            hist_df = pd.read_csv(io.StringIO(historical_text), header=None)
 
-                df = pd.read_csv(io.StringIO(resp.text))
+            form_df_raw = pd.read_csv(io.StringIO(form_text))
+            form_mapped = pd.DataFrame({
+                pos: (
+                    form_df_raw[name] if name and name in form_df_raw.columns
+                    else pd.Series([None] * len(form_df_raw))
+                )
+                for pos, name in FORM_COLUMN_MAP.items()
+            })
+            # Drop entirely-blank submissions (a form entry started but never
+            # filled in) — a data-validity check, not a moderation filter.
+            title_col = form_mapped[4]
+            form_mapped = form_mapped[
+                title_col.notna() & (title_col.astype(str).str.strip() != '')
+            ]
 
-                c = {
-                    "il": 1, "rec": 2, "title": 3, "author": 5,
-                    "quiz": 6, "ar": 7, "word": 8, "fnf": 9,
-                    "topic": 10, "series": 11, "en": 12, "cn": 13
-                }
+            df = pd.concat([hist_df, form_mapped], ignore_index=True)
+            # Force canonical column order 0..14 so position always equals
+            # label, regardless of how concat happened to order things.
+            df = df[list(range(15))]
 
-                # Resolve positional indices to actual column names once, up front.
-                # (Everywhere else in the app still reads via `c` + iloc, which is fine —
-                # this only affects the in-place *writes* below.)
-                ar_col = df.columns[c['ar']]
-                word_col = df.columns[c['word']]
+            c = {
+                "il": 2, "rec": 3, "title": 4, "author": 6,
+                "quiz": 7, "ar": 8, "word": 9, "fnf": 10,
+                "topic": 11, "series": 12, "en": 13, "cn": 14
+            }
 
-                # Format ATOS Book Level column to float — assign by column name, not
-                # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
-                # silently upcasting a column's dtype through positional iloc-assignment.
-                # .round(1) matters here: binary floats can't represent decimals like
-                # 5.7 exactly, so two rows that both "mean" 5.7 can land as slightly
-                # different floats (5.7 vs 5.699999999999999) and get treated as
-                # separate buckets by value_counts() later — showing up as a stray
-                # near-invisible sliver bar next to the real one on the chart.
-                df[ar_col] = pd.to_numeric(
-                    df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
-                    errors='coerce'
-                ).fillna(0.0).round(1)
+            # Resolve positional indices to actual column names once, up front.
+            # (Everywhere else in the app still reads via `c` + iloc, which is fine —
+            # this only affects the in-place *writes* below.)
+            ar_col = df.columns[c['ar']]
+            word_col = df.columns[c['word']]
 
-                # Format Word Count column to integer — same fix
-                word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
-                df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
+            # Format ATOS Book Level column to float — assign by column name, not
+            # df.iloc[:, idx] = ..., because recent pandas versions raise instead of
+            # silently upcasting a column's dtype through positional iloc-assignment.
+            # .round(1) matters here: binary floats can't represent decimals like
+            # 5.7 exactly, so two rows that both "mean" 5.7 can land as slightly
+            # different floats (5.7 vs 5.699999999999999) and get treated as
+            # separate buckets by value_counts() later — showing up as a stray
+            # near-invisible sliver bar next to the real one on the chart.
+            df[ar_col] = pd.to_numeric(
+                df[ar_col].astype(str).str.extract(r'(\d+\.?\d*)')[0],
+                errors='coerce'
+            ).fillna(0.0).round(1)
 
-                df = df.fillna(" ")
+            # Format Word Count column to integer — same fix
+            word_cleaned = df[word_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+            df[word_col] = pd.to_numeric(word_cleaned, errors='coerce').fillna(0).astype(int)
 
-                _cached_df = (df, c)
-                return _cached_df
+            df = df.fillna(" ")
 
-            except Exception as e:
-                last_error = e
-                print(f"⚠️ Data load attempt {attempt + 1}/3 failed: {e}")
-                if attempt < 2:
-                    time.sleep(2 ** attempt)  # 1s, then 2s before retrying
+            _cached_df = (df, c)
+            return _cached_df
 
-        # All retries exhausted — print full traceback (not just str(e)) so
-        # Render logs show the real cause, and give up for this request.
-        # _cached_df stays None, so the NEXT request will try again from
-        # scratch rather than being stuck on a cached failure forever.
-        print(f"❌ Data loading failed after 3 attempts: {last_error}")
-        traceback.print_exc()
+        except Exception as e:
+            # All retries exhausted — print full traceback (not just str(e))
+            # so Render logs show the real cause, and give up for this
+            # request. _cached_df stays None, so the NEXT request will try
+            # again from scratch rather than being stuck on a cached failure.
+            print(f"❌ Data loading failed: {e}")
+            traceback.print_exc()
         return pd.DataFrame(), {}
 
 # ==========================================
