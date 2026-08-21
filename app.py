@@ -12,6 +12,7 @@ import random
 import time
 import threading
 import traceback
+import ftfy
 import requests
 from rapidfuzz import process, fuzz
 
@@ -303,6 +304,28 @@ def _fetch_sheet_csv(url, label):
                 time.sleep(2 ** attempt)  # 1s, then 2s before retrying
     raise last_error
 
+def _fix_mojibake(df):
+    """Repairs UTF-8-decoded-as-Latin-1 mojibake baked into the source
+    sheet's text — e.g. "Corduroyâ€™s" instead of "Corduroy's", or
+    "Thanksgiving Isâ€¦" instead of "Thanksgiving Is…". This is a long-running
+    historical sheet edited by many people pasting from different sources
+    over time, and this kind of corruption tends to get typed/pasted in once
+    and then just sit in the cell forever — it isn't something our fetch code
+    can prevent, only clean up after the fact. ftfy.fix_text() detects this
+    specific corruption pattern and reverses it; it's a safe no-op on text
+    that's already correct (verified against plain English AND Chinese text),
+    so applying it broadly to every text cell doesn't risk damaging clean data.
+
+    Applied unconditionally per-cell rather than gated on a column dtype
+    check — different pandas versions represent text columns differently
+    (legacy 'object' dtype vs. newer dedicated 'str' dtype), and a dtype
+    pre-check silently skipped every column entirely under pandas 3.x's
+    string dtype. The isinstance(v, str) guard inside is what actually does
+    the real work safely, regardless of the column's reported dtype."""
+    for col in df.columns:
+        df[col] = df[col].apply(lambda v: ftfy.fix_text(v) if isinstance(v, str) else v)
+    return df
+
 def load_data():
     """Load and merge both Google Sheets, cleaning numerical values."""
     global _cached_df
@@ -340,6 +363,10 @@ def load_data():
             # Force canonical column order 0..14 so position always equals
             # label, regardless of how concat happened to order things.
             df = df[list(range(15))]
+
+            # Repair mojibake baked into the source sheet's text before any
+            # other processing touches it — see _fix_mojibake() above.
+            df = _fix_mojibake(df)
 
             c = {
                 "il": 2, "rec": 3, "title": 4, "author": 6,
