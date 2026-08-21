@@ -150,57 +150,6 @@ def translate_route():
         print(f"❌ Translation request failed: {e}")
         return jsonify({"error": "Translation failed. Please try again."}), 500
 
-# ==========================================
-# 1d. Book Cover Lookup (server-side proxy for OpenLibrary)
-# ==========================================
-# OpenLibrary's search.json endpoint doesn't send CORS headers, so calling it
-# directly from browser JS via fetch() gets silently blocked by the browser —
-# unlike an <img src="..."> tag, a fetch() response is subject to CORS, and
-# without Access-Control-Allow-Origin the browser refuses to hand the response
-# body to JS at all. Server-to-server requests aren't subject to CORS (that's
-# a browser-only concept), so the fix is to have Flask do the OpenLibrary
-# lookup and hand back just the resolved cover URL; the frontend fetches that
-# from our own domain instead, which is same-origin and unaffected by CORS.
-_cover_cache = {}
-_COVER_CACHE_MAX = 1000
-
-@app.route("/cover-lookup")
-def cover_lookup():
-    title = request.args.get("title", "").strip()
-    author = request.args.get("author", "").strip()
-    size = request.args.get("size", "M").strip().upper()
-    if size not in ("S", "M", "L"):
-        size = "M"
-
-    if not title:
-        return jsonify({"cover_url": None})
-
-    cache_key = (title.lower(), author.lower(), size)
-    if cache_key in _cover_cache:
-        return jsonify({"cover_url": _cover_cache[cache_key]})
-
-    cover_url = None
-    try:
-        resp = requests.get(
-            "https://openlibrary.org/search.json",
-            params={"q": f"{title} {author}".strip(), "limit": 1},
-            # OpenLibrary asks API consumers to set a descriptive User-Agent.
-            headers={"User-Agent": "ydrclibrary.com/1.0 (book cover lookup)"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        docs = resp.json().get("docs", [])
-        if docs and docs[0].get("cover_i"):
-            cover_url = f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-{size}.jpg"
-    except Exception as e:
-        print(f"⚠️ Cover lookup failed for {title!r}: {e}")
-
-    if len(_cover_cache) >= _COVER_CACHE_MAX:
-        _cover_cache.pop(next(iter(_cover_cache)))  # evict oldest-ish
-    _cover_cache[cache_key] = cover_url
-
-    return jsonify({"cover_url": cover_url})
-
 def get_user_role(email):
     """Determine user role: owner, admin, user, or guest."""
     if not db or not email:
