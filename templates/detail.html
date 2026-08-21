@@ -36,7 +36,12 @@
     </a>
 </nav>
 <div class="container py-4">
-    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mb-3">⬅️ Back to Library</a>
+    <div class="d-flex gap-2 mb-3">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">⬅️ Back to Library</a>
+        {% if back_filters %}
+            <a href="{{ url_for('index', **back_filters) }}" class="btn btn-outline-primary">🔎 Back to Search</a>
+        {% endif %}
+    </div>
 
     <h1>📖 {{ row.iloc[idx['title']] }}</h1>
 
