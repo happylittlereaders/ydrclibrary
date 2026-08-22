@@ -492,11 +492,15 @@
 
                 <div class="tab-pane fade" id="top-view">
                     <h3 class="mb-3" style="color: #1e3d59;">🏆 Your Favorites</h3>
-                    {% if favorites %}
+                    {% if favorites_list %}
                         <div class="list-group">
-                            {% for fav_title in favorites %}
+                            {% for fav in favorites_list %}
                                 <div class="list-group-item d-flex justify-content-between align-items-center" style="border-radius: 8px; margin-bottom: 8px;">
-                                    <span>⭐ <b>{{ fav_title }}</b></span>
+                                    {% if fav.book_idx is not none %}
+                                        <a href="{{ url_for('book_detail', book_idx=fav.book_idx) }}" class="text-decoration-none">⭐ <b>{{ fav.title }}</b></a>
+                                    {% else %}
+                                        <span>⭐ <b>{{ fav.title }}</b></span>
+                                    {% endif %}
                                 </div>
                             {% endfor %}
                         </div>
