@@ -613,20 +613,26 @@ def index():
     if "favorites" not in session:
         session["favorites"] = []
 
+    # Shared title -> book_idx lookup, used to make both "Your Favorites" and
+    # "Most Liked by Everyone" clickable through to each book's detail page.
+    # A title with no match just renders without a link (can happen if the
+    # sheet's title text changed since it was favorited/liked).
+    title_to_idx = {}
+    for i, t in enumerate(df.iloc[:, c['title']].astype(str)):
+        key = t.strip().lower()
+        if key not in title_to_idx:
+            title_to_idx[key] = i
+
+    favorites_list = [
+        {"title": fav_title, "book_idx": title_to_idx.get(fav_title.strip().lower())}
+        for fav_title in session.get("favorites", [])
+    ]
+
     # Global "Most Liked" list — separate from the session-only favorites
-    # above. Resolve each liked title back to a book_idx (for linking to its
-    # detail page) by matching against the full dataset; a title with no
-    # match just renders without a link (can happen if the sheet's title
-    # text changed since it was liked).
+    # above.
     top_liked = get_top_liked_books(limit=10)
-    if top_liked:
-        title_to_idx = {}
-        for i, t in enumerate(df.iloc[:, c['title']].astype(str)):
-            key = t.strip().lower()
-            if key not in title_to_idx:
-                title_to_idx[key] = i
-        for item in top_liked:
-            item["book_idx"] = title_to_idx.get(item["title"].strip().lower())
+    for item in top_liked:
+        item["book_idx"] = title_to_idx.get(item["title"].strip().lower())
 
     # Clean filters passed to pagination links
     filters_clean = {k: v for k, v in args.items() if k != 'page' and v != ''}
@@ -642,6 +648,7 @@ def index():
         filters=filters_clean,
         user=session.get("user"),
         favorites=session.get("favorites", []),
+        favorites_list=favorites_list,
         top_liked=top_liked,
         level_counts=level_counts
     )
