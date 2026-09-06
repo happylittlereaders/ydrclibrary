@@ -575,6 +575,22 @@ def dedup_books(f_df, c):
     }, index=f_df.index)
     return f_df.loc[~dedup_keys.duplicated(keep='first')]
 
+def get_shuffle_seed():
+    """Return this session's gallery shuffle seed, creating one on first use.
+
+    "Every time the user logs onto the website" the book order should look
+    freshly randomized — but it also has to stay STABLE while they browse,
+    or paging forward/back (and "Back to Library" from a book's detail page)
+    would show a different, confusing order each time. A per-session seed,
+    stored once in the session cookie, gives both: the same seed drives the
+    same deterministic shuffle for the life of that session (see its use in
+    index() via DataFrame.sample(random_state=...)), and a brand new one is
+    generated whenever a session doesn't have one yet — a first visit, or
+    right after login()/logout() explicitly clear it below."""
+    if "shuffle_seed" not in session:
+        session["shuffle_seed"] = random.randint(0, 2_000_000_000)
+    return session["shuffle_seed"]
+
 # ==========================================
 # 5. Main Dashboard & Search Routes
 # ==========================================
@@ -605,6 +621,24 @@ def index():
     # pagination below are computed AFTER this so they reflect distinct
     # books, not one count per recommender.
     f_df = dedup_books(f_df, c)
+
+    # Randomize the gallery order once per session (see get_shuffle_seed()),
+    # so browsing feels fresh each time someone arrives at the site instead
+    # of always showing the sheet's original row order. Skipped when a Smart
+    # AI Search query is active — fuzzy_rank() (inside apply_filters) has
+    # already sorted those results by match relevance, which matters more
+    # than randomness there.
+    #
+    # Using .sample(frac=1, random_state=...) rather than shuffling once and
+    # caching the result: given the same input rows and the same seed, it
+    # deterministically reproduces the identical order every time. That's
+    # what makes pagination stable — page 3 shows the same 12 books on every
+    # request as long as the session (and therefore the seed) hasn't
+    # changed — and it's also what lets "Back to Library" on the detail page
+    # land the person on the exact page they came from (see book_detail()).
+    fuzzy_active = bool(args.get("fuzzy", "").strip())
+    if not fuzzy_active and not f_df.empty:
+        f_df = f_df.sample(frac=1, random_state=get_shuffle_seed())
 
     # Calculate level distribution for Chart.js.
     # Excludes 0 — that's the placeholder for books with no ATOS level in the
@@ -740,6 +774,8 @@ def login():
                     "nickname": user_data.get("nickname", "User"),
                     "role": get_user_role(email)
                 }
+                # Fresh gallery shuffle for this new login — see get_shuffle_seed().
+                session["shuffle_seed"] = random.randint(0, 2_000_000_000)
                 flash("Logged in successfully!", "success")
             else:
                 flash("Incorrect password.", "danger")
@@ -816,6 +852,11 @@ def reset_password():
 @app.route("/logout")
 def logout():
     session.pop("user", None)
+    # Clear the shuffle seed too, so whoever browses next (as a guest, or the
+    # next person to log in on this browser) gets a newly randomized gallery
+    # order instead of inheriting the previous session's — see
+    # get_shuffle_seed().
+    session.pop("shuffle_seed", None)
     flash("Logged out successfully.", "info")
     return redirect(url_for("index"))
 
@@ -828,10 +869,14 @@ def book_detail(book_idx):
     if book_idx < 0 or book_idx >= len(df):
         return "Book not found", 404
 
-    # Filters carried over from the gallery/blind-box link that led here (see
-    # the "View Details" link in index.html and blind_box() above), used to
-    # power the "Back to Search" button — returns the person to the exact
-    # filtered view they came from instead of a blank gallery.
+    # Filters (and page number) carried over from the gallery/blind-box link
+    # that led here — see the "View Details" link in index.html, which now
+    # passes `page` alongside the active filters, and blind_box() above.
+    # Powers the "⬅️ Back to Library" button on the detail page: with these,
+    # it returns the person to the exact page of the exact filtered/search
+    # view they came from (same random shuffle too, since that's reproduced
+    # from the session's stable seed — see get_shuffle_seed()) instead of
+    # dropping them back on a blank page 1.
     back_filters = {k: v for k, v in request.args.items() if v != ''}
 
     row = df.iloc[book_idx]
