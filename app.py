@@ -89,62 +89,10 @@ def validate_email(email):
 # an API key — everything that calls fetch_translation() stays the same.
 _translation_cache = {}
 _TRANSLATION_CACHE_MAX = 500  # cap so the cache can't grow unbounded in memory
-_TRANSLATE_CHUNK_LIMIT = 4500  # stay safely under Google's endpoint's own
-                                 # undocumented per-request length limit
-
-def _split_text_for_translation(text, limit=_TRANSLATE_CHUNK_LIMIT):
-    """Splits text into pieces under `limit` characters, breaking on
-    paragraph boundaries where possible so a translation request never cuts a
-    sentence in half. Falls back to a hard slice only if a single paragraph
-    itself exceeds the limit (rare, but some recommendations run 5000+ chars).
-
-    Paragraph-break newlines are treated as tokens in their own right (same
-    as the paragraph text itself), so each one always lands in exactly one
-    output chunk — this guarantees "".join(chunks) always reconstructs the
-    original text exactly, rather than relying on careful bookkeeping to
-    avoid silently dropping a separator at a chunk boundary."""
-    if len(text) <= limit:
-        return [text]
-
-    paragraphs = text.split("\n")
-    tokens = []
-    for i, para in enumerate(paragraphs):
-        if i > 0:
-            tokens.append("\n")
-        tokens.append(para)
-
-    chunks = []
-    current = ""
-    for token in tokens:
-        if len(token) > limit:
-            # A single paragraph itself is too long — flush what we have,
-            # then hard-slice this oversized token on its own.
-            if current:
-                chunks.append(current)
-                current = ""
-            for i in range(0, len(token), limit):
-                chunks.append(token[i:i + limit])
-            continue
-
-        if len(current) + len(token) <= limit:
-            current += token
-        else:
-            chunks.append(current)
-            current = token
-
-    if current:
-        chunks.append(current)
-    return chunks
 
 def fetch_translation(text, target_lang, source_lang="auto"):
     """Translate `text` into `target_lang` (ISO code, e.g. 'es', 'zh-CN', 'en').
-    Raises on failure — callers decide how to degrade.
-
-    Long text (some book recommendations run 2,000-5,000+ characters, full
-    essay-length reviews) gets split into chunks under _TRANSLATE_CHUNK_LIMIT
-    and translated piece by piece, then rejoined — Google's translate
-    endpoint has its own undocumented length ceiling per request and silently
-    fails/truncates on very long single requests."""
+    Raises on failure — callers decide how to degrade."""
     text = (text or "").strip()
     if not text:
         return ""
@@ -153,26 +101,22 @@ def fetch_translation(text, target_lang, source_lang="auto"):
     if cache_key in _translation_cache:
         return _translation_cache[cache_key]
 
-    translated_parts = []
-    for chunk in _split_text_for_translation(text):
-        resp = requests.get(
-            "https://translate.googleapis.com/translate_a/single",
-            params={
-                "client": "gtx",
-                "sl": source_lang,
-                "tl": target_lang,
-                "dt": "t",
-                "q": chunk,
-            },
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        # Response shape: [[[translated_chunk, original_chunk, ...], ...], ...]
-        translated_parts.append("".join(segment[0] for segment in data[0] if segment[0]))
-
-    translated = "".join(translated_parts)
+    resp = requests.get(
+        "https://translate.googleapis.com/translate_a/single",
+        params={
+            "client": "gtx",
+            "sl": source_lang,
+            "tl": target_lang,
+            "dt": "t",
+            "q": text,
+        },
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    # Response shape: [[[translated_chunk, original_chunk, ...], ...], ...]
+    translated = "".join(segment[0] for segment in data[0] if segment[0])
 
     if len(_translation_cache) >= _TRANSLATION_CACHE_MAX:
         _translation_cache.pop(next(iter(_translation_cache)))  # evict oldest-ish
@@ -195,16 +139,11 @@ def maybe_translate_query(query):
         print(f"⚠️ Query translation failed, falling back to raw query: {e}")
         return query
 
-@app.route("/translate", methods=["POST"])
+@app.route("/translate")
 def translate_route():
-    """JSON endpoint the detail page's Translate tab calls client-side.
-    POST with a JSON body (not GET with query params) — recommendation text
-    can run several thousand characters, and putting that in a URL query
-    string risks exceeding the WSGI server's request-line length limit
-    (Gunicorn defaults to ~4KB) well before it even reaches this route."""
-    data = request.get_json(silent=True) or {}
-    text = data.get("text", "")
-    target_lang = (data.get("lang") or "en").strip() or "en"
+    """Small JSON endpoint the detail page's Translate tab calls client-side."""
+    text = request.args.get("text", "")
+    target_lang = request.args.get("lang", "en").strip() or "en"
     try:
         translated = fetch_translation(text, target_lang=target_lang)
         return jsonify({"translated": translated})
