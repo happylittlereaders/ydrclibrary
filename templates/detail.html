@@ -192,6 +192,13 @@
 
     // Translate tab: calls the /translate endpoint (server-side, hits Google
     // Translate's public endpoint) and swaps in the result.
+    //
+    // This is a POST with a JSON body, not a GET with the text in the query
+    // string. Recommendation text can run to several thousand characters —
+    // as a GET query string that would blow past the request-line size
+    // limit most WSGI servers/proxies enforce (e.g. gunicorn's default 4094
+    // bytes), so longer recommendations would silently fail before ever
+    // reaching the server. A POST body has no such limit.
     document.querySelectorAll('.translate-panel').forEach(panel => {
         const btn = panel.querySelector('.translate-btn');
         const select = panel.querySelector('.translate-lang-select');
@@ -203,7 +210,11 @@
             output.classList.add('text-muted');
             output.textContent = 'Translating…';
 
-            fetch(`/translate?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(sourceText)}`)
+            fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: sourceText, lang: lang })
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
