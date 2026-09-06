@@ -191,7 +191,11 @@
     }
 
     // Translate tab: calls the /translate endpoint (server-side, hits Google
-    // Translate's public endpoint) and swaps in the result.
+    // Translate's public endpoint) and swaps in the result. POST with a JSON
+    // body — NOT GET with the text in the URL — because recommendation text
+    // can run several thousand characters, and a GET query string that long
+    // gets rejected by Gunicorn's default request-line length limit (~4KB)
+    // before it even reaches our route.
     document.querySelectorAll('.translate-panel').forEach(panel => {
         const btn = panel.querySelector('.translate-btn');
         const select = panel.querySelector('.translate-lang-select');
@@ -203,7 +207,11 @@
             output.classList.add('text-muted');
             output.textContent = 'Translating…';
 
-            fetch(`/translate?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(sourceText)}`)
+            fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lang, text: sourceText })
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
