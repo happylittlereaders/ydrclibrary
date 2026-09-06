@@ -87,6 +87,15 @@ def validate_email(email):
 # failing in production, the fix is to swap fetch_translation()'s internals
 # for an official provider (Google Cloud Translation API, DeepL, etc.) behind
 # an API key — everything that calls fetch_translation() stays the same.
+#
+# NOTE: this call is a POST with the text in the request body (`data=`), not
+# a GET with it in the query string. Some recommendation text now runs to
+# several thousand characters (the new Historical Booklist sheet has much
+# longer write-ups than before), and a GET request would put that whole
+# string, URL-encoded, into the request line — easily blowing past request
+# line/header size limits enforced by intermediate proxies. POST avoids that
+# entirely. Google's endpoint accepts the same params via POST body just
+# fine.
 _translation_cache = {}
 _TRANSLATION_CACHE_MAX = 500  # cap so the cache can't grow unbounded in memory
 
@@ -101,9 +110,9 @@ def fetch_translation(text, target_lang, source_lang="auto"):
     if cache_key in _translation_cache:
         return _translation_cache[cache_key]
 
-    resp = requests.get(
+    resp = requests.post(
         "https://translate.googleapis.com/translate_a/single",
-        params={
+        data={
             "client": "gtx",
             "sl": source_lang,
             "tl": target_lang,
@@ -139,11 +148,19 @@ def maybe_translate_query(query):
         print(f"⚠️ Query translation failed, falling back to raw query: {e}")
         return query
 
-@app.route("/translate")
+@app.route("/translate", methods=["POST"])
 def translate_route():
-    """Small JSON endpoint the detail page's Translate tab calls client-side."""
-    text = request.args.get("text", "")
-    target_lang = request.args.get("lang", "en").strip() or "en"
+    """Small JSON endpoint the detail page's Translate tab calls client-side.
+
+    POST, not GET: recommendation text can run to several thousand
+    characters, and as a GET query string that exceeds the request-line size
+    limit most WSGI servers/proxies enforce (gunicorn defaults to 4094
+    bytes) — so long recommendations would silently 400 before this route
+    ever ran. Sending the text in a JSON body sidesteps that entirely.
+    """
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    target_lang = (data.get("lang") or "en").strip() or "en"
     try:
         translated = fetch_translation(text, target_lang=target_lang)
         return jsonify({"translated": translated})
