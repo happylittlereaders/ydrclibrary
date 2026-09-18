@@ -964,6 +964,63 @@ def add_comment():
 
     return redirect(url_for("book_detail", book_idx=book_idx))
 
+@app.route("/comment/edit", methods=["POST"])
+def edit_comment():
+    """Comment author only — edits their own comment's text in place.
+
+    Before overwriting, the CURRENT text is pushed onto the comment's
+    'history' array (via ArrayUnion, so concurrent edits from different tabs
+    can't clobber each other's history entries) along with when it was
+    superseded. That history isn't shown to everyone — see book_detail()
+    passing it through unchanged and detail.html only rendering it for
+    admins/owners — but every version a comment has ever had stays
+    reconstructable from it regardless of who's currently viewing.
+    """
+    user = session.get("user")
+    if not user:
+        flash("You must be logged in to edit comments.", "warning")
+        return redirect(url_for("index"))
+
+    comment_id = request.form.get("comment_id")
+    book_idx = request.form.get("book_idx")
+    new_text = request.form.get("text", "").strip()
+
+    if not db or not comment_id or not new_text:
+        flash("Nothing to update.", "warning")
+        return redirect(url_for("book_detail", book_idx=book_idx) if book_idx else url_for("index"))
+
+    try:
+        doc_ref = db.collection("comments").document(comment_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            flash("Comment not found.", "danger")
+        else:
+            data = doc.to_dict()
+            # Author-only — deliberately not "author OR admin": admins can
+            # see a comment's history (that's the point of this feature) but
+            # editing someone else's words and having it read as though they
+            # wrote it themselves is a different, riskier capability nobody
+            # asked for here.
+            if data.get("author_email") != user.get("email"):
+                flash("You can only edit your own comments.", "danger")
+            elif data.get("text", "") == new_text:
+                flash("No changes to save.", "info")
+            else:
+                previous_version = {
+                    "text": data.get("text", ""),
+                    "edited_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                }
+                doc_ref.update({
+                    "text": new_text,
+                    "edited_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "history": firestore.ArrayUnion([previous_version]),
+                })
+                flash("Comment updated.", "success")
+    except Exception as e:
+        flash(f"Error editing comment: {e}", "danger")
+
+    return redirect(url_for("book_detail", book_idx=book_idx) if book_idx else url_for("index"))
+
 @app.route("/comment/delete", methods=["POST"])
 def delete_comment():
     """Admin/owner only — deletes a single comment by its Firestore doc id."""
