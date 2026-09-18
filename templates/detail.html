@@ -10,6 +10,9 @@
         .info-card { background: white; padding: 15px; border-radius: 12px; border-left: 6px solid #ff6e40; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .comment-box { background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #eee; border-left: 5px solid #1e3d59; }
         .comment-meta { color: #888; font-size: 0.8em; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .edit-history { background: #fdf6e3; border-left: 3px solid #e9c46a; padding: 10px 14px; border-radius: 6px; margin-top: 8px; }
+        .history-entry { padding: 6px 0; border-bottom: 1px dashed #e2d1b0; }
+        .history-entry:last-child { border-bottom: none; }
         .recommendation-box { background: #fffcf5; padding: 25px; border-radius: 15px; border: 2px dashed #ff6e40; margin-top: 15px; }
         .cover-container { display: flex; justify-content: center; align-items: center; height: 220px; background: #fafafa; border-radius: 6px; overflow: hidden; }
         .cover-img { max-height: 220px; max-width: 100%; border-radius: 6px; object-fit: contain; transition: opacity 0.3s ease; }
@@ -169,15 +172,43 @@
             <div class="comment-box">
                 <div class="comment-meta">
                     <span>👤 {{ c.author_nick or 'Anonymous' }}</span>
-                    <span>📅 {{ c.time }}</span>
+                    <span>
+                        📅 {{ c.time }}
+                        {% if c.history %}<em>&nbsp;(edited {{ c.edited_at }})</em>{% endif %}
+                    </span>
                 </div>
-                <div>{{ c.text }}</div>
+                <div id="comment-text-{{ c.id }}">{{ c.text }}</div>
+
+                {% if user and c.author_email == user.email %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="toggleEditForm('{{ c.id }}')">✏️ Edit</button>
+                    <form action="{{ url_for('edit_comment') }}" method="POST" class="mt-2" id="edit-form-{{ c.id }}" style="display:none;">
+                        <input type="hidden" name="comment_id" value="{{ c.id }}">
+                        <input type="hidden" name="book_idx" value="{{ book_idx }}">
+                        <textarea name="text" class="form-control form-control-sm mb-2" rows="3" required>{{ c.text }}</textarea>
+                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditForm('{{ c.id }}')">Cancel</button>
+                    </form>
+                {% endif %}
+
                 {% if user and user.role in ['admin', 'owner'] %}
-                    <form action="{{ url_for('delete_comment') }}" method="POST" class="mt-2">
+                    <form action="{{ url_for('delete_comment') }}" method="POST" class="mt-2 d-inline">
                         <input type="hidden" name="comment_id" value="{{ c.id }}">
                         <input type="hidden" name="book_idx" value="{{ book_idx }}">
                         <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this comment? This cannot be undone.');">🗑️ Delete</button>
                     </form>
+
+                    {% if c.history %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="toggleHistory('{{ c.id }}')">🕓 Edit History ({{ c.history|length }})</button>
+                        <div class="edit-history" id="history-{{ c.id }}" style="display:none;">
+                            <small class="fw-bold text-secondary d-block mb-1">Admin view — previous versions</small>
+                            {% for h in c.history %}
+                                <div class="history-entry">
+                                    <small class="text-muted d-block">Replaced {{ h.edited_at }}</small>
+                                    <div>{{ h.text }}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 {% endif %}
             </div>
         {% else %}
@@ -194,6 +225,22 @@
 
         document.querySelectorAll('.rec-tab-btn').forEach(b => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
+    }
+
+    // Shows/hides a single comment's inline edit form (only the comment's
+    // own author ever sees the Edit button that calls this — see detail.html).
+    function toggleEditForm(commentId) {
+        const form = document.getElementById('edit-form-' + commentId);
+        if (!form) return;
+        form.style.display = (form.style.display === 'none' || !form.style.display) ? 'block' : 'none';
+    }
+
+    // Shows/hides a single comment's edit history (admin/owner only — see
+    // detail.html, which only renders the button and panel for those roles).
+    function toggleHistory(commentId) {
+        const panel = document.getElementById('history-' + commentId);
+        if (!panel) return;
+        panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
     }
 
     // Translate tab: calls the /translate endpoint (server-side, hits Google
