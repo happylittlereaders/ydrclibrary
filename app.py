@@ -261,7 +261,7 @@ def get_top_liked_books(limit=10):
 #    workflow columns aren't used as a display filter, only entirely blank
 #    rows (a submission started but never filled in) are dropped.
 HISTORICAL_CSV_URL = "https://docs.google.com/spreadsheets/d/1fmdFvMk85ByKhLO4wWgMFhsvtAuj63vBE-k3pgWfBew/export?format=csv&gid=0"
-FORM_CSV_URL = "https://docs.google.com/spreadsheets/d/1BRJCPLYCRzXXramQaarN_MCvzVSJYlpNEQk1semmfoM/export?format=csv&gid=233242005"
+FORM_CSV_URL = "https://docs.google.com/spreadsheets/d/1cjVeD7eP2-7tbniwEyx86rWoAFlZIJ3Og7HQhwTd5_I/export?format=csv&gid=483927167"
 
 # Maps the book-data columns of the Submission Form sheet onto the same
 # positional layout the (now column-shifted) Historical sheet uses: every
