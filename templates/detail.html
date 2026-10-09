@@ -285,8 +285,7 @@
 
     // No-cover placeholder — see the same comment in index.html's script for
     // why this is a double-quoted JS string wrapping single-quoted SVG markup.
-    const NO_COVER_SVG = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='13' fill='%23999999' text-anchor='middle' dominant-baseline='middle'>Cover<br>Coming<br>Soon!</text></svg>";
-
+    const NO_COVER_SVG = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='220'><rect width='100%25' height='100%25' fill='%23eeeeee'/><text x='50%25' y='50%25' font-family='sans-serif' font-size='16' fill='%23999999' text-anchor='middle' dominant-baseline='middle'><tspan x='50%25' dy='-1.2em'>Cover</tspan><tspan x='50%25' dy='1.2em'>Coming</tspan><tspan x='50%25' dy='1.2em'>Soon!</tspan></text></svg>";
     // Client-Side Asynchronous Cover Image Loader (same approach as the
     // gallery page — fetches directly from OpenLibrary, reverted from the
     // server-proxy approach for speed; see index.html's script for why).
