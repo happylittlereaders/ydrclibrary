@@ -91,6 +91,23 @@
             background-color: #e9c46a !important;
         }
 
+        /* CLEAR FILTERS BUTTON */
+        .btn-clear-filters {
+            background-color: #ffffff;
+            border: 1px solid #adb5bd;
+            color: #6c757d;
+            font-weight: 600;
+            border-radius: 8px;
+            padding: 8px 16px;
+            transition: all 0.15s ease-in-out;
+        }
+
+        .btn-clear-filters:hover {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            color: #ffffff;
+        }
+
         /* BLIND BOX BUTTON */
         .blind-box-btn { 
             background-color: #ffffff; 
@@ -404,6 +421,11 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100 mt-2">Apply Filters</button>
+                <!-- Plain link to "/" with no query string: resets every filter
+                     and the Smart AI Search box at once and returns to page 1.
+                     The gallery shuffle order is unaffected (it's tied to the
+                     session, not the URL). -->
+                <a href="{{ url_for('index') }}" class="btn btn-clear-filters w-100 mt-2">✖ Clear Filters</a>
             </form>
         </div>
 
